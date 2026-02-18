@@ -27,10 +27,10 @@
 staging-settings:
   rpcs:
     - chain-name: ethereum-testnet-sepolia
-      url: https://sepolia.gateway.tenderly.co/3ToZEWUfJV5n5KoTz1vaBG
+      url: https://virtual.rpc.tenderly.co/Suji/chainlink-cre/private/agent-index-rpc/33a3e738-8ea4-4ebf-8687-051fa8ab7926
 
 # ==========================================================================
 production-settings:
   rpcs:
     - chain-name: ethereum-testnet-sepolia
-      url: https://sepolia.gateway.tenderly.co/3ToZEWUfJV5n5KoTz1vaBG
+      url: https://virtual.rpc.tenderly.co/Suji/chainlink-cre/private/agent-index-rpc/33a3e738-8ea4-4ebf-8687-051fa8ab7926

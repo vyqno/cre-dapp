@@ -1,0 +1,8 @@
+{
+  "schedule": "*/60 * * * * *",
+  "agentMetricsAddress": "0xF37DA4260891042bEF41e9434e1c1dEf811b5412",
+  "bondingCurveFactoryAddress": "0x5Db2bEB5465Cdd6794f6AF404cd5d4b19a0f9570",
+  "chainSelectorName": "ethereum-testnet-sepolia",
+  "gasLimit": "500000",
+  "agentIds": [1]
+}
