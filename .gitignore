@@ -1,4 +1,7 @@
 .references/
+.claude
+conversations/
+.agents/
 
 # Node / package managers
 node_modules/
