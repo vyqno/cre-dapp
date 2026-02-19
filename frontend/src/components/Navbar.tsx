@@ -9,6 +9,7 @@ import { client } from "@/lib/thirdweb";
 const NAV_LINKS = [
   { href: "/", label: "Leaderboard" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/markets", label: "Markets" },
   { href: "/create", label: "Create Agent" },
 ];
 
