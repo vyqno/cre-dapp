@@ -250,9 +250,12 @@ const computeMetrics = (
 	const ethToUsdRate = 3000n
 	const tvlManaged = Number((curveState.reserveBalance * ethToUsdRate) / 1000000000000n) // wei -> 6 decimals
 
-	// Trade count: increment based on supply (each whole token = ~1 trade activity)
+	// Trade count: increment by supply DELTA since last observation (not total supply)
+	// Each whole-token change in supply represents ~1 trade
 	const previousTrades = Number(currentMetrics.totalTrades)
-	const totalTrades = previousTrades + (supplyTokens > 0n ? Number(supplyTokens) : 0)
+	const previousSupply = previousTrades > 0 ? BigInt(previousTrades) : 0n
+	const supplyDelta = supplyTokens > previousSupply ? Number(supplyTokens - previousSupply) : 0
+	const totalTrades = previousTrades + supplyDelta
 
 	// ROI: price appreciation in basis points x 100
 	// roiBps = ((currentPrice - basePrice) / basePrice) * 10000 * 100
