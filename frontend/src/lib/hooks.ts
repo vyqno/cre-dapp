@@ -9,6 +9,25 @@ import {
   getBondingCurveContract,
 } from "./contracts";
 
+// --- Helpers ---
+
+/** Convert a decimal string (e.g. "1.5") to wei bigint without floating-point precision loss */
+function parseUnits(value: string, decimals: number = 18): bigint {
+  const [intPart = "0", fracPart = ""] = value.split(".");
+  const padded = fracPart.padEnd(decimals, "0").slice(0, decimals);
+  return BigInt(intPart + padded);
+}
+
+/** Debounce a string value by delay ms */
+function useDebouncedValue(value: string, delay: number = 400): string {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
 // --- Types ---
 
 export interface AgentData {
@@ -69,11 +88,17 @@ const METHODS = {
     "function getSellRefund(uint256 tokenAmount) view returns (uint256)",
   buy: "function buy() payable returns (uint256)",
   sell: "function sell(uint256 tokenAmount)",
+  // AgentRegistry (write)
+  registerAgent:
+    "function registerAgent(address wallet, string name, string strategyType, string description) returns (uint256)",
+  // BondingCurveFactory (write)
+  createCurve:
+    "function createCurve(uint256 agentId, string name, string symbol) returns (address)",
 } as const;
 
 // --- Read a single agent's full data ---
 
-async function fetchAgentData(agentId: bigint): Promise<AgentWithMetrics> {
+async function fetchAgentData(agentId: bigint): Promise<AgentWithMetrics | null> {
   const [agentRaw, metricsRaw, curveAddress] = await Promise.all([
     readContract({
       contract: agentRegistryContract,
@@ -92,33 +117,48 @@ async function fetchAgentData(agentId: bigint): Promise<AgentWithMetrics> {
     }),
   ]);
 
-  // Read bonding curve state
-  const curveContract = getBondingCurveContract(curveAddress);
-  const [price, supply, reserve, curveSlope] = await Promise.all([
-    readContract({
-      contract: curveContract,
-      method: METHODS.currentPrice,
-      params: [],
-    }),
-    readContract({
-      contract: curveContract,
-      method: METHODS.totalSupply,
-      params: [],
-    }),
-    readContract({
-      contract: curveContract,
-      method: METHODS.reserveBalance,
-      params: [],
-    }),
-    readContract({
-      contract: curveContract,
-      method: METHODS.slope,
-      params: [],
-    }),
-  ]);
+  // Check if agent exists (id=0 means non-existent)
+  const agent = agentRaw as any;
+  const agentIdNum = Number(agent.id ?? agent[0] ?? 0);
+  if (agentIdNum === 0) return null;
+
+  // Read bonding curve state (skip if no curve deployed)
+  const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+  const hasCurve =
+    curveAddress && curveAddress !== ZERO_ADDRESS;
+
+  let price = 0n;
+  let supply = 0n;
+  let reserve = 0n;
+  let curveSlope = 0n;
+
+  if (hasCurve) {
+    const curveContract = getBondingCurveContract(curveAddress);
+    [price, supply, reserve, curveSlope] = await Promise.all([
+      readContract({
+        contract: curveContract,
+        method: METHODS.currentPrice,
+        params: [],
+      }).then((v) => BigInt(v)),
+      readContract({
+        contract: curveContract,
+        method: METHODS.totalSupply,
+        params: [],
+      }).then((v) => BigInt(v)),
+      readContract({
+        contract: curveContract,
+        method: METHODS.reserveBalance,
+        params: [],
+      }).then((v) => BigInt(v)),
+      readContract({
+        contract: curveContract,
+        method: METHODS.slope,
+        params: [],
+      }).then((v) => BigInt(v)),
+    ]);
+  }
 
   // Decode agent struct - thirdweb returns as array-like with field access
-  const agent = agentRaw as any;
   const metrics = metricsRaw as any;
 
   return {
@@ -139,11 +179,11 @@ async function fetchAgentData(agentId: bigint): Promise<AgentWithMetrics> {
       totalTrades: Number(metrics.totalTrades ?? metrics[5] ?? 0),
       lastUpdated: Number(metrics.lastUpdated ?? metrics[6] ?? 0),
     },
-    curveAddress,
-    tokenPrice: BigInt(price),
-    totalSupply: BigInt(supply),
-    reserveBalance: BigInt(reserve),
-    slope: BigInt(curveSlope),
+    curveAddress: curveAddress || ZERO_ADDRESS,
+    tokenPrice: price,
+    totalSupply: supply,
+    reserveBalance: reserve,
+    slope: curveSlope,
   };
 }
 
@@ -174,7 +214,7 @@ export function useAgents() {
         (agentIds as bigint[]).map((id) => fetchAgentData(id))
       );
 
-      setAgents(results);
+      setAgents(results.filter((a): a is AgentWithMetrics => a !== null));
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Failed to fetch agents";
@@ -281,9 +321,10 @@ export function useTokenBalance(
 
 export function useBuyPrice(curveAddress: string | undefined, ethAmount: string) {
   const [estimatedTokens, setEstimatedTokens] = useState<bigint>(0n);
+  const debouncedAmount = useDebouncedValue(ethAmount);
 
   useEffect(() => {
-    if (!curveAddress || !ethAmount || Number(ethAmount) <= 0) {
+    if (!curveAddress || !debouncedAmount || Number(debouncedAmount) <= 0) {
       setEstimatedTokens(0n);
       return;
     }
@@ -293,15 +334,12 @@ export function useBuyPrice(curveAddress: string | undefined, ethAmount: string)
 
     async function fetch() {
       try {
-        // Estimate tokens for given ETH by reading getBuyPrice with a token amount
-        // Since getBuyPrice returns ETH cost for a token amount, we'll estimate the other way
-        // Simpler: tokenAmount ≈ ethAmount / currentPrice
         const price = await readContract({
           contract: curveContract,
           method: METHODS.currentPrice,
           params: [],
         });
-        const ethWei = BigInt(Math.floor(Number(ethAmount) * 1e18));
+        const ethWei = parseUnits(debouncedAmount);
         const priceVal = BigInt(price);
         if (priceVal > 0n) {
           const tokens = (ethWei * BigInt(1e18)) / priceVal;
@@ -316,7 +354,7 @@ export function useBuyPrice(curveAddress: string | undefined, ethAmount: string)
     return () => {
       cancelled = true;
     };
-  }, [curveAddress, ethAmount]);
+  }, [curveAddress, debouncedAmount]);
 
   return estimatedTokens;
 }
@@ -328,9 +366,10 @@ export function useSellRefund(
   tokenAmount: string
 ) {
   const [refund, setRefund] = useState<bigint>(0n);
+  const debouncedAmount = useDebouncedValue(tokenAmount);
 
   useEffect(() => {
-    if (!curveAddress || !tokenAmount || Number(tokenAmount) <= 0) {
+    if (!curveAddress || !debouncedAmount || Number(debouncedAmount) <= 0) {
       setRefund(0n);
       return;
     }
@@ -340,7 +379,7 @@ export function useSellRefund(
 
     async function fetch() {
       try {
-        const tokensWei = BigInt(Math.floor(Number(tokenAmount) * 1e18));
+        const tokensWei = parseUnits(debouncedAmount);
         const result = await readContract({
           contract: curveContract,
           method: METHODS.getSellRefund,
@@ -356,7 +395,7 @@ export function useSellRefund(
     return () => {
       cancelled = true;
     };
-  }, [curveAddress, tokenAmount]);
+  }, [curveAddress, debouncedAmount]);
 
   return refund;
 }
@@ -378,10 +417,37 @@ export function prepareSellTransaction(
   tokenAmount: string
 ) {
   const curveContract = getBondingCurveContract(curveAddress);
-  const tokensWei = BigInt(Math.floor(Number(tokenAmount) * 1e18));
+  const tokensWei = parseUnits(tokenAmount);
   return prepareContractCall({
     contract: curveContract,
     method: METHODS.sell,
     params: [tokensWei],
+  });
+}
+
+// --- Prepare registration transactions ---
+
+export function prepareRegisterAgent(
+  wallet: string,
+  name: string,
+  strategyType: string,
+  description: string,
+) {
+  return prepareContractCall({
+    contract: agentRegistryContract,
+    method: METHODS.registerAgent,
+    params: [wallet, name, strategyType, description],
+  });
+}
+
+export function prepareCreateCurve(
+  agentId: bigint,
+  tokenName: string,
+  tokenSymbol: string,
+) {
+  return prepareContractCall({
+    contract: bondingCurveFactoryContract,
+    method: METHODS.createCurve,
+    params: [agentId, tokenName, tokenSymbol],
   });
 }
