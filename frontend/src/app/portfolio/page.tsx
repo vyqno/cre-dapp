@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useActiveAccount } from "thirdweb/react";
 import { useAgents, useTokenBalance } from "@/lib/hooks";
@@ -11,9 +12,11 @@ import type { AgentWithMetrics } from "@/lib/hooks";
 function HoldingRow({
   agent,
   userAddress,
+  onHasBalance,
 }: {
   agent: AgentWithMetrics;
   userAddress: string;
+  onHasBalance: () => void;
 }) {
   const { balance, loading } = useTokenBalance(agent.curveAddress, userAddress);
   const tokenBalance = Number(balance) / 1e18;
@@ -22,40 +25,45 @@ function HoldingRow({
 
   if (loading) {
     return (
-      <div className="grid grid-cols-8 items-center gap-4 border-b border-zinc-800/30 px-6 py-4">
-        <div className="col-span-8 h-6 animate-pulse rounded bg-zinc-800/50" />
+      <div className="grid grid-cols-5 items-center gap-4 border-b border-zinc-800/30 px-6 py-4 md:grid-cols-8">
+        <div className="col-span-5 h-6 animate-pulse rounded bg-zinc-800/50 md:col-span-8" />
       </div>
     );
   }
 
-  // Don't show agents where user has no balance
   if (tokenBalance <= 0) return null;
+
+  // Notify parent that at least one holding exists
+  if (tokenBalance > 0) onHasBalance();
 
   return (
     <Link
       href={`/agent/${agent.id}`}
-      className="grid grid-cols-8 items-center gap-4 border-b border-zinc-800/30 px-6 py-4 transition-colors hover:bg-zinc-800/30"
+      className="grid grid-cols-3 items-center gap-4 border-b border-zinc-800/30 px-6 py-4 transition-colors hover:bg-zinc-800/30 md:grid-cols-8"
     >
-      <div className="col-span-2">
+      <div className="col-span-2 md:col-span-2">
         <p className="font-medium">{agent.name}</p>
         <span className="text-xs text-zinc-500">{agent.strategyType}</span>
       </div>
-      <div className="col-span-1 text-right text-sm">
-        {tokenBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-      </div>
-      <div className="col-span-1 text-right text-sm">
-        {tokenPrice.toFixed(5)} ETH
-      </div>
-      <div className="col-span-1 text-right text-sm font-medium">
+      <div className="col-span-1 text-right text-sm font-medium md:hidden">
         {value.toFixed(4)} ETH
       </div>
-      <div className="col-span-1 text-right text-sm">
+      <div className="hidden text-right text-sm md:block">
+        {tokenBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+      </div>
+      <div className="hidden text-right text-sm md:block">
+        {tokenPrice.toFixed(5)} ETH
+      </div>
+      <div className="hidden text-right text-sm font-medium md:block">
+        {value.toFixed(4)} ETH
+      </div>
+      <div className="hidden text-right text-sm md:block">
         {formatUsd(agent.metrics.tvlManaged / 1e6)}
       </div>
-      <div className="col-span-1 text-right text-sm">
+      <div className="hidden text-right text-sm md:block">
         {agent.metrics.totalTrades.toLocaleString()}
       </div>
-      <div className="col-span-1 text-right">
+      <div className="hidden text-right md:block">
         <span
           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
             agent.metrics.roiBps >= 0
@@ -73,6 +81,7 @@ function HoldingRow({
 export default function PortfolioPage() {
   const account = useActiveAccount();
   const { agents, loading: agentsLoading } = useAgents();
+  const [hasAnyHolding, setHasAnyHolding] = useState(false);
 
   if (!account) {
     return (
@@ -90,13 +99,15 @@ export default function PortfolioPage() {
     return (
       <div className="space-y-8">
         <h1 className="text-3xl font-bold">Portfolio</h1>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
-            <div
-              key={i}
-              className="h-24 animate-pulse rounded-xl border border-zinc-800 bg-zinc-900/50"
-            />
-          ))}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div
+                key={i}
+                className="h-12 animate-pulse rounded-lg bg-zinc-800/50"
+              />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -130,17 +141,28 @@ export default function PortfolioPage() {
           <div className="col-span-1 text-right">Agent ROI</div>
         </div>
 
-        {agents.map((agent) => (
-          <HoldingRow
-            key={agent.id}
-            agent={agent}
-            userAddress={account.address}
-          />
-        ))}
-
-        {agents.length === 0 && (
+        {agents.length === 0 ? (
           <div className="px-6 py-12 text-center text-zinc-500">
             No agents found on-chain
+          </div>
+        ) : (
+          agents.map((agent) => (
+            <HoldingRow
+              key={agent.id}
+              agent={agent}
+              userAddress={account.address}
+              onHasBalance={() => setHasAnyHolding(true)}
+            />
+          ))
+        )}
+
+        {agents.length > 0 && !hasAnyHolding && !agentsLoading && (
+          <div className="px-6 py-12 text-center text-zinc-500">
+            You don&apos;t hold any agent tokens yet.{" "}
+            <Link href="/" className="text-blue-400 hover:underline">
+              Browse the leaderboard
+            </Link>{" "}
+            to find agents to invest in.
           </div>
         )}
       </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useAgents, type AgentWithMetrics } from "@/lib/hooks";
-import { formatBps, formatUsd, shortenAddress } from "@/lib/utils";
+import { formatBps, formatUsd, formatEth, shortenAddress } from "@/lib/utils";
 
 function RoiBadge({ roiBps }: { roiBps: number }) {
   const isPositive = roiBps >= 0;
@@ -110,8 +110,8 @@ export default function Home() {
     0
   );
   const totalReserve = agents.reduce(
-    (sum, a) => sum + Number(a.reserveBalance),
-    0
+    (sum, a) => sum + a.reserveBalance,
+    0n
   );
 
   return (
@@ -138,7 +138,7 @@ export default function Home() {
       {/* On-chain data badge */}
       <div className="flex items-center justify-center gap-2 rounded-lg border border-emerald-900/30 bg-emerald-950/10 px-4 py-2 text-xs text-emerald-400">
         <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-        Live on-chain data from Tenderly Sepolia &middot; {(totalReserve / 1e18).toFixed(4)} ETH total reserve
+        Live on-chain data from Tenderly Sepolia &middot; {formatEth(totalReserve)} ETH total reserve
       </div>
 
       {/* Leaderboard */}

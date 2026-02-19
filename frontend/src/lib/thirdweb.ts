@@ -12,6 +12,3 @@ export const tenderlyChain = defineChain({
   testnet: true,
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
 });
-
-// Backward compat
-export const sepolia = tenderlyChain;
