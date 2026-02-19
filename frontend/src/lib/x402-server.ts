@@ -1,5 +1,6 @@
-import { withX402, x402ResourceServer, HTTPFacilitatorClient } from "@x402/next";
+import { withX402 } from "@x402/next";
 import type { RouteConfig } from "@x402/next";
+import { x402ResourceServer, HTTPFacilitatorClient } from "@x402/core/server";
 import { NextRequest, NextResponse } from "next/server";
 
 const payTo = process.env.NEXT_PUBLIC_X402_PAYWALL_ADDRESS!;
