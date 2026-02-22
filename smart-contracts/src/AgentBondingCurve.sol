@@ -100,7 +100,7 @@ contract AgentBondingCurve is ERC20, Ownable, ReentrancyGuard {
     uint256 public immutable agentId;
 
     /// @notice Minimum token price when supply is zero (in wei).
-    uint256 public basePrice;
+    uint256 public immutable basePrice;
 
     /// @notice Price increment per whole token of supply (in wei).
     uint256 public slope;

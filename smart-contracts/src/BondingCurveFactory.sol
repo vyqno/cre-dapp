@@ -32,10 +32,10 @@ contract BondingCurveFactory is Ownable {
     // ──────────────────────────────────────────────
 
     /// @notice Default base price applied to every new bonding curve (in wei).
-    uint256 public defaultBasePrice;
+    uint256 public immutable defaultBasePrice;
 
     /// @notice Default slope applied to every new bonding curve (in wei).
-    uint256 public defaultSlope;
+    uint256 public immutable defaultSlope;
 
     /// @notice Mapping from agent ID -> deployed bonding curve address.
     mapping(uint256 => address) public agentCurves;
@@ -85,7 +85,7 @@ contract BondingCurveFactory is Ownable {
         uint256 agentId,
         string calldata name,
         string calldata symbol
-    ) external returns (address) {
+    ) external onlyOwner returns (address) {
         if (agentCurves[agentId] != address(0)) revert Factory__CurveAlreadyExists();
 
         AgentBondingCurve curve = new AgentBondingCurve(

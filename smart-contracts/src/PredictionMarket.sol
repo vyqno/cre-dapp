@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {AgentMetrics} from "./AgentMetrics.sol";
 
 /**
@@ -15,6 +16,8 @@ import {AgentMetrics} from "./AgentMetrics.sol";
  *      Cancelled if one side has zero liquidity at resolution time.
  */
 contract PredictionMarket is ReentrancyGuard {
+    using Address for address payable;
+
     // ── Enums ──
 
     enum MetricField { ROI, WIN_RATE, SHARPE, TVL, TRADES, DRAWDOWN }
@@ -54,8 +57,6 @@ contract PredictionMarket is ReentrancyGuard {
     error PM__ZeroBet();
     error PM__AlreadyClaimed();
     error PM__NothingToClaim();
-    error PM__NoLiquidity();
-    error PM__TransferFailed();
 
     // ── Events ──
 
@@ -64,6 +65,7 @@ contract PredictionMarket is ReentrancyGuard {
     );
     event BetPlaced(uint256 indexed marketId, address indexed user, bool isYes, uint256 amount);
     event MarketResolved(uint256 indexed marketId, Status outcome);
+    event MarketExpired(uint256 indexed marketId);
     event Claimed(uint256 indexed marketId, address indexed user, uint256 payout);
 
     constructor(address _agentMetrics) {
@@ -124,9 +126,20 @@ contract PredictionMarket is ReentrancyGuard {
         emit BetPlaced(marketId, msg.sender, isYes, msg.value);
     }
 
+    // ── Expire (triggers CRE log-based resolution) ──
+
+    /// @notice Anyone can call after deadline to emit MarketExpired, which triggers
+    ///         the CRE Market Resolver workflow via LogTriggerCapability.
+    function expire(uint256 marketId) external {
+        Market storage m = markets[marketId];
+        if (m.status != Status.OPEN) revert PM__MarketNotOpen();
+        if (block.timestamp < m.deadline) revert PM__DeadlineNotPassed();
+        emit MarketExpired(marketId);
+    }
+
     // ── Resolve ──
 
-    function resolve(uint256 marketId) external {
+    function resolve(uint256 marketId) external nonReentrant {
         Market storage m = markets[marketId];
         if (m.status != Status.OPEN) revert PM__MarketNotOpen();
         if (block.timestamp < m.deadline) revert PM__DeadlineNotPassed();
@@ -179,8 +192,7 @@ contract PredictionMarket is ReentrancyGuard {
         if (payout == 0) revert PM__NothingToClaim();
         claimed[marketId][msg.sender] = true;
 
-        (bool ok,) = msg.sender.call{value: payout}("");
-        if (!ok) revert PM__TransferFailed();
+        payable(msg.sender).sendValue(payout);
 
         emit Claimed(marketId, msg.sender, payout);
     }
@@ -209,6 +221,6 @@ contract PredictionMarket is ReentrancyGuard {
         if (field == MetricField.TVL) return int256(m.tvlManaged);
         if (field == MetricField.TRADES) return int256(m.totalTrades);
         if (field == MetricField.DRAWDOWN) return int256(m.maxDrawdownBps);
-        return 0;
+        revert(); // unreachable: all MetricField values handled above
     }
 }

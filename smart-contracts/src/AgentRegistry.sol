@@ -34,6 +34,7 @@ contract AgentRegistry {
     // ──────────────────────────────────────────────
 
     /// @notice Represents a registered AI agent's on-chain identity.
+    /// @dev Aligned with ERC-8004 Identity Registry.
     struct Agent {
         uint256 id;
         address wallet;
@@ -41,6 +42,7 @@ contract AgentRegistry {
         string name;
         string strategyType;
         string description;
+        string[] capabilities; // ERC-8004: list of agent capabilities (actions)
         bool isActive;
         uint256 registeredAt;
     }
@@ -84,13 +86,15 @@ contract AgentRegistry {
      * @param name         Human-readable name for the agent.
      * @param strategyType Short label describing the agent's strategy.
      * @param description  Longer description of the agent's behavior.
+     * @param capabilities List of actions the agent can perform (ERC-8004).
      * @return agentId     The newly assigned agent ID.
      */
     function registerAgent(
         address wallet,
         string calldata name,
         string calldata strategyType,
-        string calldata description
+        string calldata description,
+        string[] calldata capabilities
     ) external returns (uint256) {
         if (wallet == address(0)) revert Registry__InvalidWalletAddress();
         if (bytes(name).length == 0) revert Registry__EmptyName();
@@ -106,6 +110,7 @@ contract AgentRegistry {
             name: name,
             strategyType: strategyType,
             description: description,
+            capabilities: capabilities,
             isActive: true,
             registeredAt: block.timestamp
         });
