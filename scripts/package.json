@@ -1,0 +1,26 @@
+{
+  "name": "agentindex-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cli": "tsx cli.ts",
+    "deploy": "tsx cli.ts deploy",
+    "setup": "tsx cli.ts setup",
+    "status": "tsx cli.ts status",
+    "full": "tsx cli.ts full",
+    "simulate": "tsx simulate-cre.ts"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "inquirer": "^9.3.7",
+    "ora": "^8.1.1",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "tsx": "^4.19.0"
+  }
+}
