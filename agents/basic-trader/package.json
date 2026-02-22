@@ -1,0 +1,21 @@
+{
+  "name": "basic-trader",
+  "version": "1.0.0",
+  "description": "Simple AI agent using Coinbase AgentKit",
+  "main": "index.ts",
+  "scripts": {
+    "start": "ts-node index.ts",
+    "trade": "ts-node trade.ts"
+  },
+  "dependencies": {
+    "@coinbase/agentkit": "^0.1.0",
+    "@coinbase/cdp-sdk": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
