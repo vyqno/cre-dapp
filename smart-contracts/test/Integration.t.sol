@@ -23,6 +23,7 @@ contract IntegrationTest is Test {
     address public agentWallet = address(0xA1);
     address public investor1 = address(0xBEEF);
     address public investor2 = address(0xCAFE);
+    string[] public defaultCaps;
 
     function setUp() public {
         registry = new AgentRegistry();
@@ -32,6 +33,10 @@ contract IntegrationTest is Test {
 
         vm.deal(investor1, 100 ether);
         vm.deal(investor2, 100 ether);
+
+        defaultCaps = new string[](2);
+        defaultCaps[0] = "swap";
+        defaultCaps[1] = "transfer";
     }
 
     // ─── E2E: Full Agent Lifecycle ───────────────
@@ -39,7 +44,7 @@ contract IntegrationTest is Test {
     function test_FullAgentLifecycle() public {
         // 1. Register agent
         uint256 agentId = registry.registerAgent(
-            agentWallet, "AlphaYield", "yield_farming", "Multi-protocol yield optimizer"
+            agentWallet, "AlphaYield", "yield_farming", "Multi-protocol yield optimizer", defaultCaps
         );
         assertEq(agentId, 1);
 
@@ -82,7 +87,7 @@ contract IntegrationTest is Test {
     // ─── E2E: CRE Slope Decrease for Poor Performer ─
 
     function test_SlopeDecreaseForPoorPerformer() public {
-        uint256 agentId = registry.registerAgent(agentWallet, "BadBot", "trading", "desc");
+        uint256 agentId = registry.registerAgent(agentWallet, "BadBot", "trading", "desc", defaultCaps);
         address curveAddr = factory.createCurve(agentId, "BadBot Shares", "BAD");
         AgentBondingCurve curve = AgentBondingCurve(curveAddr);
         curve.setCurveAdjuster(creWorkflow);
@@ -117,7 +122,7 @@ contract IntegrationTest is Test {
     // ─── E2E: Solvency check blocks dangerous slope increases ─
 
     function test_SolvencyCheckBlocksDangerousIncrease() public {
-        uint256 agentId = registry.registerAgent(agentWallet, "Bot1", "trading", "desc");
+        uint256 agentId = registry.registerAgent(agentWallet, "Bot1", "trading", "desc", defaultCaps);
         address curveAddr = factory.createCurve(agentId, "Bot1 Shares", "B1S");
         AgentBondingCurve curve = AgentBondingCurve(curveAddr);
         curve.setCurveAdjuster(creWorkflow);
@@ -141,9 +146,9 @@ contract IntegrationTest is Test {
 
     function test_MultiAgentEcosystem() public {
         // Register 3 agents
-        uint256 id1 = registry.registerAgent(address(0xA1), "Bot1", "trading", "desc");
-        uint256 id2 = registry.registerAgent(address(0xA2), "Bot2", "yield", "desc");
-        uint256 id3 = registry.registerAgent(address(0xA3), "Bot3", "arb", "desc");
+        uint256 id1 = registry.registerAgent(address(0xA1), "Bot1", "trading", "desc", defaultCaps);
+        uint256 id2 = registry.registerAgent(address(0xA2), "Bot2", "yield", "desc", defaultCaps);
+        uint256 id3 = registry.registerAgent(address(0xA3), "Bot3", "arb", "desc", defaultCaps);
 
         // Create curves for all
         address curve1 = factory.createCurve(id1, "Bot1 Shares", "B1S");
@@ -194,7 +199,7 @@ contract IntegrationTest is Test {
     // ─── Edge: Deactivated agent tokens still tradable ─
 
     function test_DeactivatedAgentTokensStillTradable() public {
-        uint256 agentId = registry.registerAgent(agentWallet, "Bot1", "trading", "desc");
+        uint256 agentId = registry.registerAgent(agentWallet, "Bot1", "trading", "desc", defaultCaps);
         address curveAddr = factory.createCurve(agentId, "Bot1 Shares", "B1S");
         AgentBondingCurve curve = AgentBondingCurve(curveAddr);
 
@@ -213,7 +218,7 @@ contract IntegrationTest is Test {
     // ─── Edge: Zero slope flat pricing ───────────
 
     function test_ZeroSlopeFlatPricing() public {
-        uint256 agentId = registry.registerAgent(agentWallet, "FlatBot", "stable", "desc");
+        uint256 agentId = registry.registerAgent(agentWallet, "FlatBot", "stable", "desc", defaultCaps);
         address curveAddr = factory.createCurve(agentId, "FlatBot Shares", "FLAT");
         AgentBondingCurve curve = AgentBondingCurve(curveAddr);
         curve.setCurveAdjuster(creWorkflow);
@@ -261,7 +266,7 @@ contract IntegrationTest is Test {
         }
 
         uint256 agentId = registry.registerAgent(
-            address(0xDEAD), string(longStr), "strategy", string(longStr)
+            address(0xDEAD), string(longStr), "strategy", string(longStr), defaultCaps
         );
         assertEq(bytes(registry.getAgent(agentId).name).length, 500);
     }

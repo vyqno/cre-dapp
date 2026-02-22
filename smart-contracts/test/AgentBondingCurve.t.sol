@@ -200,6 +200,58 @@ contract AgentBondingCurveTest is Test {
         vm.expectRevert(AgentBondingCurve.BondingCurve__ZeroAdjusterAddress.selector);
         curve.setCurveAdjuster(address(0));
     }
+
+    // ─── Event Emission Tests ────────────────────
+
+    function test_buyEmitsTokensBoughtEvent() public {
+        vm.prank(buyer);
+        // We check that TokensBought is emitted with correct buyer
+        vm.expectEmit(true, false, false, false);
+        emit AgentBondingCurve.TokensBought(buyer, 0, 0);
+        curve.buy{value: 0.01 ether}();
+    }
+
+    function test_adjustSlopeEmitsEvent() public {
+        uint256 oldSlope = curve.slope();
+        vm.prank(curveAdjuster);
+        vm.expectEmit(false, false, false, true);
+        emit AgentBondingCurve.SlopeAdjusted(oldSlope, 0.00005 ether);
+        curve.adjustSlope(0.00005 ether);
+    }
+
+    // ─── Access Control ─────────────────────────
+
+    function test_nonOwnerCannotSetCurveAdjuster() public {
+        vm.prank(buyer);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", buyer));
+        curve.setCurveAdjuster(address(0x1234));
+    }
+
+    // ─── Transfer and Sell ──────────────────────
+
+    function test_transferAndSell() public {
+        address recipient = address(0xCAFE);
+        vm.deal(recipient, 1 ether);
+
+        // Buyer buys tokens
+        vm.prank(buyer);
+        uint256 tokens = curve.buy{value: 1 ether}();
+
+        // Transfer half to recipient
+        uint256 halfTokens = (tokens / 2 / 1e18) * 1e18;
+        vm.prank(buyer);
+        curve.transfer(recipient, halfTokens);
+
+        assertEq(curve.balanceOf(recipient), halfTokens);
+
+        // Recipient sells their tokens
+        uint256 recipientBalBefore = recipient.balance;
+        vm.prank(recipient);
+        curve.sell(halfTokens);
+
+        assertGt(recipient.balance, recipientBalBefore);
+        assertEq(curve.balanceOf(recipient), 0);
+    }
 }
 
 /// @dev Helper contract to test that smart contracts can buy/sell (verifying Address.sendValue works)

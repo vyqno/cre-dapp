@@ -51,4 +51,11 @@ contract BondingCurveFactoryTest is Test {
         vm.expectRevert(BondingCurveFactory.Factory__SlopeExceedsMax.selector);
         new BondingCurveFactory(0.0001 ether, 0.02 ether);
     }
+
+    function test_nonOwnerCannotCreateCurve() public {
+        address nonOwner = address(0xBEEF);
+        vm.prank(nonOwner);
+        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", nonOwner));
+        factory.createCurve(99, "Test", "TST");
+    }
 }

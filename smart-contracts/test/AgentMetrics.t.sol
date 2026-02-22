@@ -21,6 +21,8 @@ contract AgentMetricsTest is Test {
         assertEq(m.roiBps, 152500);
         assertEq(m.winRateBps, 7500);
         assertEq(m.maxDrawdownBps, 3200);
+        assertEq(m.sharpeRatioScaled, 18500);
+        assertEq(m.tvlManaged, 1000000e6);
         assertEq(m.totalTrades, 150);
         assertGt(m.lastUpdated, 0);
     }
@@ -98,5 +100,12 @@ contract AgentMetricsTest is Test {
         vm.prank(creWorkflow);
         vm.expectRevert(AgentMetrics.Metrics__InvalidDrawdown.selector);
         metrics.updateMetrics(1, 100, 5000, 10001, 10000, 500e6, 10);
+    }
+
+    function test_updateMetricsEmitsEvent() public {
+        vm.prank(creWorkflow);
+        vm.expectEmit(true, false, false, true);
+        emit AgentMetrics.MetricsUpdated(1, 152500, 7500, 150);
+        metrics.updateMetrics(1, 152500, 7500, 3200, 18500, 1000000e6, 150);
     }
 }
