@@ -15,36 +15,8 @@ import {
   prepareClaim,
 } from "@/lib/prediction-hooks";
 import { useAgent } from "@/lib/hooks";
-import { formatEth, shortenAddress } from "@/lib/utils";
+import { formatEth, shortenAddress, formatThreshold, formatTimeLeft } from "@/lib/utils";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
-
-function formatThreshold(metric: number, threshold: bigint): string {
-  switch (metric) {
-    case 0:
-      return `${(Number(threshold) / 10000).toFixed(2)}%`;
-    case 1:
-      return `${(Number(threshold) / 100).toFixed(2)}%`;
-    case 2:
-      return `${(Number(threshold) / 10000).toFixed(2)}`;
-    case 3:
-      return `$${(Number(threshold) / 1e6).toLocaleString()}`;
-    case 4:
-      return Number(threshold).toLocaleString();
-    case 5:
-      return `${(Number(threshold) / 100).toFixed(2)}%`;
-    default:
-      return threshold.toString();
-  }
-}
-
-function formatTimeLeft(ms: number): string {
-  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  if (days > 0) return `${days}d ${hours}h remaining`;
-  const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-  if (hours > 0) return `${hours}h ${minutes}m remaining`;
-  return `${minutes}m remaining`;
-}
 
 export default function MarketDetailPage({
   params,

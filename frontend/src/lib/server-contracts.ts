@@ -1,40 +1,33 @@
-import { createThirdwebClient, defineChain, getContract, readContract } from "thirdweb";
+import { createThirdwebClient, getContract, readContract } from "thirdweb";
+import { appChain } from "./thirdweb";
 
 // Server-side thirdweb client (reuses same client ID as frontend)
 const serverClient = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!,
 });
 
-const chain = defineChain({
-  id: 11155111,
-  rpc: process.env.NEXT_PUBLIC_TENDERLY_RPC_URL!,
-  name: "Tenderly Sepolia",
-  testnet: true,
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-});
-
 export const serverAgentRegistryContract = getContract({
   client: serverClient,
-  chain,
+  chain: appChain,
   address: process.env.NEXT_PUBLIC_AGENT_REGISTRY_ADDRESS!,
 });
 
 export const serverAgentMetricsContract = getContract({
   client: serverClient,
-  chain,
+  chain: appChain,
   address: process.env.NEXT_PUBLIC_AGENT_METRICS_ADDRESS!,
 });
 
 export const serverBondingCurveFactoryContract = getContract({
   client: serverClient,
-  chain,
+  chain: appChain,
   address: process.env.NEXT_PUBLIC_BONDING_CURVE_FACTORY_ADDRESS!,
 });
 
 export function getServerBondingCurveContract(address: string) {
   return getContract({
     client: serverClient,
-    chain,
+    chain: appChain,
     address,
   });
 }

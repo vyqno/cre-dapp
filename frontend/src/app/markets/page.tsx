@@ -11,7 +11,7 @@ import {
   type MarketData,
 } from "@/lib/prediction-hooks";
 import { useAgents, type AgentWithMetrics } from "@/lib/hooks";
-import { formatEth } from "@/lib/utils";
+import { formatEth, formatThreshold, formatTimeLeft } from "@/lib/utils";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
 
 function StatusBadge({ status }: { status: number }) {
@@ -28,25 +28,6 @@ function StatusBadge({ status }: { status: number }) {
       {STATUS_LABELS[status] || "Unknown"}
     </span>
   );
-}
-
-function formatThreshold(metric: number, threshold: bigint): string {
-  switch (metric) {
-    case 0: // ROI (bps x 100)
-      return `${(Number(threshold) / 10000).toFixed(2)}%`;
-    case 1: // WIN_RATE (bps)
-      return `${(Number(threshold) / 100).toFixed(2)}%`;
-    case 2: // SHARPE (scaled x 10000)
-      return `${(Number(threshold) / 10000).toFixed(2)}`;
-    case 3: // TVL (raw token decimals, USDC = 6)
-      return `$${(Number(threshold) / 1e6).toLocaleString()}`;
-    case 4: // TRADES (absolute)
-      return Number(threshold).toLocaleString();
-    case 5: // DRAWDOWN (bps)
-      return `${(Number(threshold) / 100).toFixed(2)}%`;
-    default:
-      return threshold.toString();
-  }
 }
 
 function MarketCard({
@@ -117,15 +98,6 @@ function MarketCard({
       </div>
     </Link>
   );
-}
-
-function formatTimeLeft(ms: number): string {
-  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  if (days > 0) return `${days}d ${hours}h left`;
-  const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-  if (hours > 0) return `${hours}h ${minutes}m left`;
-  return `${minutes}m left`;
 }
 
 function CreateMarketForm({

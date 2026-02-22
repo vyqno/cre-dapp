@@ -150,7 +150,7 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Table Header */}
+        {/* Table Header — desktop only */}
         <div className="hidden grid-cols-12 gap-4 border-b border-zinc-800/50 px-6 py-3 text-xs font-medium uppercase tracking-wider text-zinc-500 md:grid">
           <div className="col-span-1">#</div>
           <div className="col-span-3">Agent</div>
@@ -167,35 +167,52 @@ export default function Home() {
           <Link
             key={agent.id}
             href={`/agent/${agent.id}`}
-            className="grid grid-cols-12 items-center gap-4 border-b border-zinc-800/30 px-6 py-4 transition-colors hover:bg-zinc-800/30"
+            className="block border-b border-zinc-800/30 px-6 py-4 transition-colors hover:bg-zinc-800/30 md:grid md:grid-cols-12 md:items-center md:gap-4"
           >
-            <div className="col-span-1 text-sm font-semibold text-zinc-500">
+            {/* Mobile layout */}
+            <div className="flex items-center justify-between md:hidden">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold text-zinc-500">{index + 1}</span>
+                <div>
+                  <p className="font-medium">{agent.name}</p>
+                  <span className="text-xs text-zinc-500">{agent.strategyType}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <RoiBadge roiBps={agent.metrics.roiBps} />
+                <p className="mt-1 text-xs text-zinc-400">
+                  {(Number(agent.tokenPrice) / 1e18).toFixed(5)} ETH
+                </p>
+              </div>
+            </div>
+            {/* Desktop layout */}
+            <div className="col-span-1 hidden text-sm font-semibold text-zinc-500 md:block">
               {index + 1}
             </div>
-            <div className="col-span-3">
+            <div className="col-span-3 hidden md:block">
               <p className="font-medium">{agent.name}</p>
               <p className="text-xs text-zinc-500">
                 {shortenAddress(agent.wallet)}
               </p>
             </div>
-            <div className="col-span-2">
+            <div className="col-span-2 hidden md:block">
               <span className="rounded-md bg-zinc-800 px-2 py-1 text-xs text-zinc-300">
                 {agent.strategyType}
               </span>
             </div>
-            <div className="col-span-1 text-right">
+            <div className="col-span-1 hidden text-right md:block">
               <RoiBadge roiBps={agent.metrics.roiBps} />
             </div>
-            <div className="col-span-1 text-right text-sm">
+            <div className="col-span-1 hidden text-right text-sm md:block">
               {formatBps(agent.metrics.winRateBps)}
             </div>
-            <div className="col-span-1 text-right text-sm">
+            <div className="col-span-1 hidden text-right text-sm md:block">
               {(agent.metrics.sharpeRatioScaled / 10000).toFixed(2)}
             </div>
-            <div className="col-span-1 text-right text-sm">
+            <div className="col-span-1 hidden text-right text-sm md:block">
               {formatUsd(agent.metrics.tvlManaged / 1e6)}
             </div>
-            <div className="col-span-2 text-right">
+            <div className="col-span-2 hidden text-right md:block">
               <p className="text-sm font-medium">
                 {(Number(agent.tokenPrice) / 1e18).toFixed(5)} ETH
               </p>

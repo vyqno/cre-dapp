@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useActiveAccount } from "thirdweb/react";
 import { useAgents, useTokenBalance } from "@/lib/hooks";
@@ -23,6 +23,10 @@ function HoldingRow({
   const tokenPrice = Number(agent.tokenPrice) / 1e18;
   const value = tokenBalance * tokenPrice;
 
+  useEffect(() => {
+    if (tokenBalance > 0) onHasBalance();
+  }, [tokenBalance, onHasBalance]);
+
   if (loading) {
     return (
       <div className="grid grid-cols-5 items-center gap-4 border-b border-zinc-800/30 px-6 py-4 md:grid-cols-8">
@@ -32,9 +36,6 @@ function HoldingRow({
   }
 
   if (tokenBalance <= 0) return null;
-
-  // Notify parent that at least one holding exists
-  if (tokenBalance > 0) onHasBalance();
 
   return (
     <Link
@@ -82,6 +83,7 @@ export default function PortfolioPage() {
   const account = useActiveAccount();
   const { agents, loading: agentsLoading } = useAgents();
   const [hasAnyHolding, setHasAnyHolding] = useState(false);
+  const markHasHolding = useCallback(() => setHasAnyHolding(true), []);
 
   if (!account) {
     return (
@@ -151,7 +153,7 @@ export default function PortfolioPage() {
               key={agent.id}
               agent={agent}
               userAddress={account.address}
-              onHasBalance={() => setHasAnyHolding(true)}
+              onHasBalance={markHasHolding}
             />
           ))
         )}

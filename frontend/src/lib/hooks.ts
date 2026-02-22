@@ -11,13 +11,6 @@ import {
 
 // --- Helpers ---
 
-/** Convert a decimal string (e.g. "1.5") to wei bigint without floating-point precision loss */
-function parseUnits(value: string, decimals: number = 18): bigint {
-  const [intPart = "0", fracPart = ""] = value.split(".");
-  const padded = fracPart.padEnd(decimals, "0").slice(0, decimals);
-  return BigInt(intPart + padded);
-}
-
 /** Debounce a string value by delay ms */
 function useDebouncedValue(value: string, delay: number = 400): string {
   const [debounced, setDebounced] = useState(value);
@@ -90,7 +83,7 @@ const METHODS = {
   sell: "function sell(uint256 tokenAmount)",
   // AgentRegistry (write)
   registerAgent:
-    "function registerAgent(address wallet, string name, string strategyType, string description) returns (uint256)",
+    "function registerAgent(address wallet, string name, string strategyType, string description, string[] capabilities) returns (uint256)",
   // BondingCurveFactory (write)
   createCurve:
     "function createCurve(uint256 agentId, string name, string symbol) returns (address)",
@@ -339,7 +332,7 @@ export function useBuyPrice(curveAddress: string | undefined, ethAmount: string)
           method: METHODS.currentPrice,
           params: [],
         });
-        const ethWei = parseUnits(debouncedAmount);
+        const ethWei = toWei(debouncedAmount);
         const priceVal = BigInt(price);
         if (priceVal > 0n) {
           const tokens = (ethWei * BigInt(1e18)) / priceVal;
@@ -379,7 +372,7 @@ export function useSellRefund(
 
     async function fetch() {
       try {
-        const tokensWei = parseUnits(debouncedAmount);
+        const tokensWei = toWei(debouncedAmount);
         const result = await readContract({
           contract: curveContract,
           method: METHODS.getSellRefund,
@@ -417,7 +410,7 @@ export function prepareSellTransaction(
   tokenAmount: string
 ) {
   const curveContract = getBondingCurveContract(curveAddress);
-  const tokensWei = parseUnits(tokenAmount);
+  const tokensWei = toWei(tokenAmount);
   return prepareContractCall({
     contract: curveContract,
     method: METHODS.sell,
@@ -432,11 +425,12 @@ export function prepareRegisterAgent(
   name: string,
   strategyType: string,
   description: string,
+  capabilities: string[],
 ) {
   return prepareContractCall({
     contract: agentRegistryContract,
     method: METHODS.registerAgent,
-    params: [wallet, name, strategyType, description],
+    params: [wallet, name, strategyType, description, capabilities],
   });
 }
 

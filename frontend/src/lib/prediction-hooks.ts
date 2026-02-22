@@ -49,8 +49,6 @@ const PREDICTION_METHODS = {
     "function getMarket(uint256 marketId) view returns ((uint256 agentId, uint8 metric, uint8 comparison, int256 threshold, uint256 deadline, address creator, uint8 status, uint256 totalYes, uint256 totalNo))",
   getAllMarketIds:
     "function getAllMarketIds() view returns (uint256[])",
-  getMarketCount:
-    "function getMarketCount() view returns (uint256)",
   yesStakes:
     "function yesStakes(uint256 marketId, address user) view returns (uint256)",
   noStakes:
