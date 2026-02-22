@@ -3,33 +3,41 @@ pragma solidity ^0.8.24;
 
 import {Script, console} from "forge-std/Script.sol";
 import {PredictionMarket} from "../src/PredictionMarket.sol";
+import {AgentMetrics} from "../src/AgentMetrics.sol";
 
+/**
+ * @title DeployPredictionMarket
+ * @notice Deploys the PredictionMarket contract.
+ *         Requires AGENT_METRICS address to be set in env or passed via command line.
+ */
 contract DeployPredictionMarket is Script {
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
-        address metricsAddr = vm.envAddress("AGENT_METRICS");
+        address deployer = vm.addr(pk);
+        
+        // Try to get AgentMetrics address from env
+        address agentMetricsAddr;
+        try vm.envAddress("AGENT_METRICS") returns (address addr) {
+            agentMetricsAddr = addr;
+        } catch {
+            console.log("Error: AGENT_METRICS env var not set");
+            return;
+        }
+
+        console.log("===========================================");
+        console.log("  Deploying PredictionMarket");
+        console.log("===========================================");
+        console.log("Deployer:", deployer);
+        console.log("AgentMetrics:", agentMetricsAddr);
 
         vm.startBroadcast(pk);
 
-        PredictionMarket pm = new PredictionMarket(metricsAddr);
-        console.log("PredictionMarket deployed:", address(pm));
-
-        // Create demo markets
-
-        // Agent 1: ROI above 15% (150000 bps) in 7 days
-        pm.createMarket(1, PredictionMarket.MetricField.ROI, PredictionMarket.Comparison.ABOVE, 150000, block.timestamp + 7 days);
-        console.log("Market 1 created: Agent 1 ROI > 15%");
-
-        // Agent 2: Win rate above 70% (7000 bps) in 7 days
-        pm.createMarket(2, PredictionMarket.MetricField.WIN_RATE, PredictionMarket.Comparison.ABOVE, 7000, block.timestamp + 7 days);
-        console.log("Market 2 created: Agent 2 Win Rate > 70%");
-
-        // Agent 3: TVL above $2M in 7 days
-        pm.createMarket(
-            3, PredictionMarket.MetricField.TVL, PredictionMarket.Comparison.ABOVE, int256(2000000e6), block.timestamp + 7 days
-        );
-        console.log("Market 3 created: Agent 3 TVL > $2M");
+        PredictionMarket market = new PredictionMarket(agentMetricsAddr);
 
         vm.stopBroadcast();
+
+        console.log("");
+        console.log("PredictionMarket deployed:", address(market));
+        console.log("");
     }
 }

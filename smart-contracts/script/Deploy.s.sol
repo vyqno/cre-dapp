@@ -2,26 +2,21 @@
 pragma solidity ^0.8.24;
 
 import {Script, console} from "forge-std/Script.sol";
-import {AgentRegistry} from "../src/AgentRegistry.sol";
-import {AgentMetrics} from "../src/AgentMetrics.sol";
-import {BondingCurveFactory} from "../src/BondingCurveFactory.sol";
-import {AgentBondingCurve} from "../src/AgentBondingCurve.sol";
+import {AgentRegistry} from "src/AgentRegistry.sol";
+import {AgentMetrics} from "src/AgentMetrics.sol";
+import {BondingCurveFactory} from "src/BondingCurveFactory.sol";
+import {AgentBondingCurve} from "src/AgentBondingCurve.sol";
 
 /**
  * @title Deploy
- * @author Hitesh (vyqno)
- * @notice Deploys the full AgentIndex protocol to Tenderly Virtual TestNet.
- *         Deploys all contracts, seeds 3 demo agents with metrics, and creates
- *         bonding curves — ready for frontend + CRE integration.
+ * @notice Deploys the AgentIndex protocol core contracts.
+ *         Designed for multi-chain deployment (Sepolia, Base Sepolia, etc.).
  *
  * @dev Usage:
  *      forge script script/Deploy.s.sol \
- *        --rpc-url $TENDERLY_VNET_RPC \
+ *        --rpc-url $RPC_URL \
  *        --broadcast \
- *        --slow
- *
- *      Required env:
- *        PRIVATE_KEY — Deployer wallet (fund from Tenderly faucet)
+ *        --verify
  */
 contract Deploy is Script {
     function run() external {
@@ -55,25 +50,33 @@ contract Deploy is Script {
         console.log("");
         console.log("[4/6] Registering demo agents...");
 
+        string[] memory caps = new string[](2);
+        caps[0] = "swap";
+        caps[1] = "transfer";
+
         uint256 id1 = registry.registerAgent(
             address(0x1001), "AlphaYield Bot", "DeFi Yield",
-            "Multi-protocol yield optimization across Aave, Compound, and Uniswap v4"
+            "Multi-protocol yield optimization across Aave, Compound, and Uniswap v4",
+            caps
         );
 
         uint256 id2 = registry.registerAgent(
             address(0x1002), "MomentumTrader", "DEX Trading",
-            "Cross-DEX momentum trading with MEV protection via Flashbots"
+            "Cross-DEX momentum trading with MEV protection via Flashbots",
+            caps
         );
 
         uint256 id3 = registry.registerAgent(
             address(0x1003), "StableHarvester", "Stablecoin Farming",
-            "Conservative stablecoin farming across blue-chip protocols"
+            "Conservative stablecoin farming across blue-chip protocols",
+            caps
         );
 
         // ─── 3. Create Bonding Curves ───────────────
         console.log("[5/6] Creating bonding curves...");
 
         address curve1 = factory.createCurve(id1, "AlphaYield Shares", "AYS");
+        // In production, the curve adjuster might be a DAO or the agent itself
         AgentBondingCurve(curve1).setCurveAdjuster(deployer);
 
         address curve2 = factory.createCurve(id2, "MomentumTrader Shares", "MTS");
@@ -97,7 +100,7 @@ contract Deploy is Script {
         console.log("  DEPLOYED");
         console.log("===========================================");
         console.log("");
-        console.log("Add to your .env:");
+        console.log("Addresses for .env:");
         console.log("  AGENT_REGISTRY=", address(registry));
         console.log("  AGENT_METRICS=", address(metrics));
         console.log("  BONDING_CURVE_FACTORY=", address(factory));
@@ -107,6 +110,5 @@ contract Deploy is Script {
         console.log("  Agent 2 (MTS):", curve2);
         console.log("  Agent 3 (SHS):", curve3);
         console.log("");
-        console.log("Next: forge script script/SimulateTrades.s.sol --rpc-url $TENDERLY_VNET_RPC --broadcast --slow");
     }
 }
