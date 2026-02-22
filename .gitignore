@@ -1,7 +1,8 @@
-.references/
+# Trash (old files, references, exported conversations, codex tmp, agentkit clone)
+trash/
+
+# Claude
 .claude
-conversations/
-.agents/
 
 # Node / package managers
 node_modules/
@@ -23,6 +24,19 @@ coverage/
 .env
 .env.local
 .env.*.local
+**/.env
+
+# Foundry
+smart-contracts/cache/
+smart-contracts/out/
+smart-contracts/chains/
+smart-contracts/cli/node_modules/
+agent-cli/node_modules/
+agent-cli/.agents-state.json
+
+# Build artifacts
+workflows/agentindex-tracker/tmp.js
+workflows/agentindex-tracker/tmp.wasm
 
 # OS / editor
 .DS_Store
