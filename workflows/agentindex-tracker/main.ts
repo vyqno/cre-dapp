@@ -14,16 +14,20 @@ import {
 } from '@chainlink/cre-sdk'
 import { type Address, decodeFunctionResult, encodeFunctionData, zeroAddress } from 'viem'
 import { z } from 'zod'
-import { AgentMetricsABI, AgentBondingCurveABI, BondingCurveFactoryABI } from '../contracts/abi'
+import { AgentMetricsABI, AgentBondingCurveABI, BondingCurveFactoryABI, AgentRegistryABI } from '../contracts/abi'
 
 // --- Config Schema ---
 const configSchema = z.object({
 	schedule: z.string(),
 	agentMetricsAddress: z.string(),
+	agentRegistryAddress: z.string(),
 	bondingCurveFactoryAddress: z.string(),
 	chainSelectorName: z.string(),
 	gasLimit: z.string(),
 	agentIds: z.array(z.number()),
+	tenderlyAccount: z.string(),
+	tenderlyProject: z.string(),
+	tenderlyAccessKey: z.string(),
 })
 
 type Config = z.infer<typeof configSchema>
@@ -223,90 +227,119 @@ const readCurrentMetrics = (
 	}
 }
 
-// --- Compute updated metrics from on-chain bonding curve state ---
-// Deterministic computation: all DON nodes read same on-chain state,
-// apply same formula, reach same result for consensus.
-//
-// Logic:
-//   - TVL = reserveBalance (ETH locked in curve, scaled to USDC-like units)
-//   - totalTrades = previous totalTrades + delta based on supply changes
-//   - ROI derived from price appreciation: (currentPrice - basePrice) / basePrice
-//   - Win rate increases with positive supply momentum, decreases otherwise
-//   - Drawdown inversely correlated with reserve health
-//   - Sharpe ratio computed from ROI / drawdown proxy
-const computeMetrics = (
+// --- Read agent wallet from AgentRegistry ---
+const readAgentWallet = (
+	runtime: Runtime<Config>,
+	evmClient: EVMClient,
 	agentId: number,
+): Address => {
+	const callData = encodeFunctionData({
+		abi: AgentRegistryABI,
+		functionName: 'getAgent',
+		args: [BigInt(agentId)],
+	})
+
+	const result = evmClient
+		.callContract(runtime, {
+			call: encodeCallMsg({
+				from: zeroAddress,
+				to: runtime.config.agentRegistryAddress as Address,
+				data: callData,
+			}),
+			blockNumber: LAST_FINALIZED_BLOCK_NUMBER,
+		})
+		.result()
+
+	const agent = decodeFunctionResult({
+		abi: AgentRegistryABI,
+		functionName: 'getAgent',
+		data: bytesToHex(result.data),
+	}) as any
+
+	return (agent.wallet ?? agent[1] ?? zeroAddress) as Address
+}
+
+// --- Read real-world performance data via Tenderly API ---
+const fetchRealAgentPerformance = async (
+	runtime: Runtime<Config>,
+	agentWallet: Address,
+): Promise<{ trades: number; wins: number; volumeUsd: number; profitUsd: number }> => {
+	runtime.log(`Fetching performance from Tenderly for wallet: ${agentWallet}`)
+
+	const url = `https://api.tenderly.co/api/v1/account/${runtime.config.tenderlyAccount}/project/${runtime.config.tenderlyProject}/transactions?wallet=${agentWallet}&limit=100`
+
+	const res = await runtime.fetch(url, {
+		headers: { 'X-Access-Key': runtime.config.tenderlyAccessKey },
+	})
+	const data = await res.json()
+	const txs = (data as any).transactions ?? []
+
+	// Count successful DeFi interactions
+	const defiTxs = txs.filter((tx: any) =>
+		tx.status === true &&
+		['swap', 'deposit', 'withdraw', 'harvest', 'buy', 'sell'].some(
+			(m: string) => (tx.decoded_input?.name ?? '').toLowerCase().includes(m)
+		)
+	)
+	const wins = defiTxs.filter((tx: any) => (tx.net_value_usd ?? 0) > 0).length
+	const profitUsd = defiTxs.reduce((sum: number, tx: any) => sum + (tx.net_value_usd ?? 0), 0)
+	const volumeUsd = defiTxs.reduce((sum: number, tx: any) => sum + Math.abs(tx.value_usd ?? 0), 0)
+
+	runtime.log(`Tenderly data: ${defiTxs.length} DeFi txs, ${wins} wins, $${profitUsd} profit`)
+
+	return { trades: defiTxs.length, wins, volumeUsd, profitUsd }
+}
+
+// --- Compute updated metrics from real-world activity + bonding curve ---
+const computeMetrics = async (
+	runtime: Runtime<Config>,
+	agentId: number,
+	agentWallet: Address,
 	curveState: CurveState,
 	currentMetrics: OnChainMetrics,
-): ComputedMetrics => {
-	const ONE_TOKEN = 1000000000000000000n // 1e18
-	const BASE_PRICE = 100000000000000n // 0.0001 ether (deploy default)
+): Promise<ComputedMetrics> => {
+	// Fetch real performance data from the agent's actual wallet
+	const realData = await fetchRealAgentPerformance(runtime, agentWallet)
 
-	// Supply in whole tokens
-	const supplyTokens = curveState.totalSupply / ONE_TOKEN
+	const BASE_PRICE = 100000000000000n
 
-	// TVL: reserve balance converted to USDC-like decimals (1 ETH ~ $3000 for demo)
-	// reserveBalance is in wei, convert to 6-decimal "USD" equivalent
+	// TVL: bonding curve reserve converted to USD (simplified: ETH × 3000)
 	const ethToUsdRate = 3000n
-	const tvlManaged = Number((curveState.reserveBalance * ethToUsdRate) / 1000000000000n) // wei -> 6 decimals
+	const curveReserveUsd = Number((curveState.reserveBalance * ethToUsdRate) / 1000000000000000000n)
+	const tvlManaged = Math.round(curveReserveUsd)
 
-	// Trade count: increment by supply DELTA since last observation (not total supply)
-	// Each whole-token change in supply represents ~1 trade
-	const previousTrades = Number(currentMetrics.totalTrades)
-	const previousSupply = previousTrades > 0 ? BigInt(previousTrades) : 0n
-	const supplyDelta = supplyTokens > previousSupply ? Number(supplyTokens - previousSupply) : 0
-	const totalTrades = previousTrades + supplyDelta
+	// ROI: combine real profit ROI with bonding curve price appreciation
+	const priceAppreciationBps = curveState.currentPrice > BASE_PRICE
+		? Number(((curveState.currentPrice - BASE_PRICE) * 10000n) / BASE_PRICE)
+		: 0
 
-	// ROI: price appreciation in basis points x 100
-	// roiBps = ((currentPrice - basePrice) / basePrice) * 10000 * 100
-	let roiBps: number
-	if (curveState.currentPrice > BASE_PRICE) {
-		const appreciation = curveState.currentPrice - BASE_PRICE
-		// Scale: (appreciation / basePrice) * 1_000_000 for bps x 100
-		roiBps = Number((appreciation * 1000000n) / BASE_PRICE)
-	} else {
-		roiBps = Number(currentMetrics.roiBps)
-	}
+	const realRoiBps = realData.volumeUsd > 0
+		? Math.round((realData.profitUsd * 10000) / realData.volumeUsd)
+		: 0
+	const combinedRoiBps = Math.floor((priceAppreciationBps + realRoiBps) / 2)
 
-	// Win rate: higher supply = more demand = higher win rate
-	// Base win rate from existing metrics, adjusted by supply momentum
-	let winRateBps = Number(currentMetrics.winRateBps)
-	if (supplyTokens > 10n) {
-		// Strong demand: nudge win rate up (capped at 9500 bps = 95%)
-		winRateBps = Math.min(winRateBps + Number(supplyTokens) * 10, 9500)
-	} else if (supplyTokens > 0n) {
-		// Some demand: slight improvement
-		winRateBps = Math.min(winRateBps + Number(supplyTokens) * 5, 9500)
-	}
+	// Win rate: actual wins / total trades (in bps)
+	const winRateBps = realData.trades > 0
+		? Math.round((realData.wins / realData.trades) * 10000)
+		: 0
 
-	// Max drawdown: inversely correlated with reserve health
-	// Higher reserve relative to supply = lower drawdown risk
-	let maxDrawdownBps = Number(currentMetrics.maxDrawdownBps)
-	if (supplyTokens > 0n && curveState.reserveBalance > 0n) {
-		// Reserve per token (in wei)
-		const reservePerToken = curveState.reserveBalance / supplyTokens
-		// If reserve per token is high relative to current price, drawdown is low
-		if (reservePerToken >= curveState.currentPrice) {
-			maxDrawdownBps = Math.max(maxDrawdownBps - 100, 500) // improve, floor at 5%
-		} else {
-			maxDrawdownBps = Math.min(maxDrawdownBps + 200, 8000) // worsen, cap at 80%
-		}
-	}
+	// Max drawdown: simplified — largest single loss as % of volume
+	// In production this would track peak-to-trough equity
+	const maxDrawdownBps = realData.volumeUsd > 0
+		? Math.min(10000, Math.round(Math.abs(Math.min(0, realData.profitUsd)) / realData.volumeUsd * 10000))
+		: 0
 
-	// Sharpe ratio: roiBps / maxDrawdownBps, scaled x 10000
-	let sharpeRatioScaled = Number(currentMetrics.sharpeRatioScaled)
-	if (maxDrawdownBps > 0 && roiBps > 0) {
-		sharpeRatioScaled = Math.floor((roiBps * 10000) / maxDrawdownBps)
-	}
+	// Sharpe: simplified ROI / assumed std dev
+	const sharpeRatioScaled = combinedRoiBps > 0 ? Math.round(combinedRoiBps / 100) : 0
 
 	return {
 		agentId,
-		roiBps,
+		roiBps: combinedRoiBps,
 		winRateBps,
 		maxDrawdownBps,
 		sharpeRatioScaled,
 		tvlManaged,
-		totalTrades,
+		totalTrades: realData.trades, // absolute count, NOT cumulative
 	}
 }
 
@@ -433,7 +466,7 @@ const adjustBondingCurveSlope = (
 }
 
 // --- Main CRE handler: runs on each cron tick ---
-const onCronTrigger = (runtime: Runtime<Config>, payload: CronPayload): string => {
+const onCronTrigger = async (runtime: Runtime<Config>, payload: CronPayload): Promise<string> => {
 	if (!payload.scheduledExecutionTime) {
 		throw new Error('Scheduled execution time is required')
 	}
@@ -460,15 +493,24 @@ const onCronTrigger = (runtime: Runtime<Config>, payload: CronPayload): string =
 		const curveState = readCurveState(runtime, evmClient, curveAddress)
 		runtime.log(`Curve state: supply=${curveState.totalSupply}, reserve=${curveState.reserveBalance}, price=${curveState.currentPrice}, slope=${curveState.slope}`)
 
-		// Step 3: Read current metrics from AgentMetrics
+		// Step 3: Read agent wallet from AgentRegistry
+		const agentWallet = readAgentWallet(runtime, evmClient, agentId)
+		if (agentWallet === zeroAddress) {
+			runtime.log(`No wallet registered for agent ${agentId}, skipping`)
+			results.push(`no-wallet:${agentId}`)
+			continue
+		}
+		runtime.log(`Agent wallet: ${agentWallet}`)
+
+		// Step 4: Read current metrics from AgentMetrics
 		const currentMetrics = readCurrentMetrics(runtime, evmClient, agentId)
 		runtime.log(`Current metrics: ROI=${currentMetrics.roiBps}, trades=${currentMetrics.totalTrades}`)
 
-		// Step 4: Compute new metrics from on-chain state
-		const computed = computeMetrics(agentId, curveState, currentMetrics)
+		// Step 5: Compute new metrics from real Tenderly data + on-chain state
+		const computed = await computeMetrics(runtime, agentId, agentWallet, curveState, currentMetrics)
 		runtime.log(`Computed metrics: ROI=${computed.roiBps}, winRate=${computed.winRateBps}, trades=${computed.totalTrades}`)
 
-		// Step 5: Only update if data has changed
+		// Step 6: Only update if data has changed
 		if (
 			BigInt(computed.roiBps) === currentMetrics.roiBps &&
 			BigInt(computed.totalTrades) === currentMetrics.totalTrades &&
@@ -479,10 +521,10 @@ const onCronTrigger = (runtime: Runtime<Config>, payload: CronPayload): string =
 			continue
 		}
 
-		// Step 6: Write verified metrics on-chain via DON consensus
+		// Step 7: Write verified metrics on-chain via DON consensus
 		const txHash = writeMetricsOnChain(runtime, evmClient, computed)
 
-		// Step 7: Adjust bonding curve slope based on computed performance
+		// Step 8: Adjust bonding curve slope based on computed performance
 		adjustBondingCurveSlope(runtime, evmClient, agentId, curveAddress, computed.roiBps)
 
 		results.push(`updated:${agentId}:${txHash}`)
