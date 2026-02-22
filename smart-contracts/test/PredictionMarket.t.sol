@@ -257,6 +257,265 @@ contract PredictionMarketTest is Test {
         pm.claim(1);
     }
 
+    // ── Test 14: Expire after deadline ──
+
+    function test_expire() public {
+        _createDefaultMarket();
+
+        vm.warp(deadline + 1);
+
+        vm.expectEmit(true, false, false, false);
+        emit PredictionMarket.MarketExpired(1);
+        pm.expire(1);
+
+        // Status should still be OPEN (expire just emits event for CRE trigger)
+        PredictionMarket.Market memory m = pm.getMarket(1);
+        assertEq(uint8(m.status), uint8(PredictionMarket.Status.OPEN));
+    }
+
+    // ── Test 15: Expire before deadline reverts ──
+
+    function test_expireBeforeDeadlineReverts() public {
+        _createDefaultMarket();
+
+        vm.expectRevert(PredictionMarket.PM__DeadlineNotPassed.selector);
+        pm.expire(1);
+    }
+
+    // ── Test 16: Expire resolved market reverts ──
+
+    function test_expireResolvedMarketReverts() public {
+        _createDefaultMarket();
+        _placeBets();
+
+        vm.warp(deadline + 1);
+        pm.resolve(1);
+
+        vm.expectRevert(PredictionMarket.PM__MarketNotOpen.selector);
+        pm.expire(1);
+    }
+
+    // ── Test 17: Resolve WIN_RATE metric ──
+
+    function test_resolveWinRate() public {
+        // Agent 1 winRate=7800, threshold=7000, ABOVE -> 7800 >= 7000 -> YES
+        vm.prank(alice);
+        pm.createMarket(1, PredictionMarket.MetricField.WIN_RATE, PredictionMarket.Comparison.ABOVE, 7000, deadline);
+        _placeBets();
+        vm.warp(deadline + 1);
+        pm.resolve(1);
+
+        PredictionMarket.Market memory m = pm.getMarket(1);
+        assertEq(uint8(m.status), uint8(PredictionMarket.Status.RESOLVED_YES));
+    }
+
+    // ── Test 18: Resolve SHARPE metric ──
+
+    function test_resolveSharpe() public {
+        // Agent 1 sharpe=18500, threshold=20000, ABOVE -> 18500 < 20000 -> NO
+        vm.prank(alice);
+        pm.createMarket(1, PredictionMarket.MetricField.SHARPE, PredictionMarket.Comparison.ABOVE, 20000, deadline);
+        _placeBets();
+        vm.warp(deadline + 1);
+        pm.resolve(1);
+
+        PredictionMarket.Market memory m = pm.getMarket(1);
+        assertEq(uint8(m.status), uint8(PredictionMarket.Status.RESOLVED_NO));
+    }
+
+    // ── Test 19: Resolve TVL metric ──
+
+    function test_resolveTVL() public {
+        // Agent 1 TVL=1500000e6, threshold=1000000e6, ABOVE -> YES
+        vm.prank(alice);
+        pm.createMarket(1, PredictionMarket.MetricField.TVL, PredictionMarket.Comparison.ABOVE, int256(1000000e6), deadline);
+        _placeBets();
+        vm.warp(deadline + 1);
+        pm.resolve(1);
+
+        PredictionMarket.Market memory m = pm.getMarket(1);
+        assertEq(uint8(m.status), uint8(PredictionMarket.Status.RESOLVED_YES));
+    }
+
+    // ── Test 20: Resolve TRADES metric ──
+
+    function test_resolveTrades() public {
+        // Agent 1 trades=200, threshold=300, ABOVE -> 200 < 300 -> NO
+        vm.prank(alice);
+        pm.createMarket(1, PredictionMarket.MetricField.TRADES, PredictionMarket.Comparison.ABOVE, 300, deadline);
+        _placeBets();
+        vm.warp(deadline + 1);
+        pm.resolve(1);
+
+        PredictionMarket.Market memory m = pm.getMarket(1);
+        assertEq(uint8(m.status), uint8(PredictionMarket.Status.RESOLVED_NO));
+    }
+
+    // ── Test 21: Resolve DRAWDOWN metric ──
+
+    function test_resolveDrawdown() public {
+        // Agent 1 drawdown=3200, threshold=5000, BELOW -> 3200 <= 5000 -> YES
+        vm.prank(alice);
+        pm.createMarket(1, PredictionMarket.MetricField.DRAWDOWN, PredictionMarket.Comparison.BELOW, 5000, deadline);
+        _placeBets();
+        vm.warp(deadline + 1);
+        pm.resolve(1);
+
+        PredictionMarket.Market memory m = pm.getMarket(1);
+        assertEq(uint8(m.status), uint8(PredictionMarket.Status.RESOLVED_YES));
+    }
+
+    // ── Test 22: Claim NO winner payout ──
+
+    function test_claimNoWinnerPayout() public {
+        // Agent 1 ROI = 185000, threshold = 200000, ABOVE -> NO wins
+        vm.prank(alice);
+        pm.createMarket(1, PredictionMarket.MetricField.ROI, PredictionMarket.Comparison.ABOVE, 200000, deadline);
+
+        // Alice bets NO, Bob bets YES
+        vm.prank(alice);
+        pm.betNo{value: 2 ether}(1);
+        vm.prank(bob);
+        pm.betYes{value: 3 ether}(1);
+
+        vm.warp(deadline + 1);
+        pm.resolve(1);
+
+        PredictionMarket.Market memory m = pm.getMarket(1);
+        assertEq(uint8(m.status), uint8(PredictionMarket.Status.RESOLVED_NO));
+
+        // Alice (NO winner) claims full pool: (2 * 5) / 2 = 5 ETH
+        uint256 balBefore = alice.balance;
+        vm.prank(alice);
+        pm.claim(1);
+        assertEq(alice.balance - balBefore, 5 ether);
+
+        // Bob (YES loser) can't claim
+        vm.prank(bob);
+        vm.expectRevert(PredictionMarket.PM__NothingToClaim.selector);
+        pm.claim(1);
+    }
+
+    // ── Test 23: Create market emits MarketCreated ──
+
+    function test_createMarketEmitsEvent() public {
+        vm.prank(alice);
+        vm.expectEmit(true, false, false, true);
+        emit PredictionMarket.MarketCreated(1, 1, uint8(PredictionMarket.MetricField.ROI), uint8(PredictionMarket.Comparison.ABOVE), 150000, deadline);
+        pm.createMarket(1, PredictionMarket.MetricField.ROI, PredictionMarket.Comparison.ABOVE, 150000, deadline);
+    }
+
+    // ── Test 24: Bet emits BetPlaced ──
+
+    function test_betYesEmitsEvent() public {
+        _createDefaultMarket();
+
+        vm.prank(alice);
+        vm.expectEmit(true, true, false, true);
+        emit PredictionMarket.BetPlaced(1, alice, true, 1 ether);
+        pm.betYes{value: 1 ether}(1);
+    }
+
+    // ── Test 25: Resolve emits MarketResolved ──
+
+    function test_resolveEmitsMarketResolvedEvent() public {
+        _createDefaultMarket();
+        _placeBets();
+        vm.warp(deadline + 1);
+
+        vm.expectEmit(true, false, false, true);
+        emit PredictionMarket.MarketResolved(1, PredictionMarket.Status.RESOLVED_YES);
+        pm.resolve(1);
+    }
+
+    // ── Test 26: Claim emits Claimed ──
+
+    function test_claimEmitsEvent() public {
+        _createDefaultMarket();
+        _placeBets();
+        vm.warp(deadline + 1);
+        pm.resolve(1);
+
+        vm.prank(alice);
+        vm.expectEmit(true, true, false, true);
+        emit PredictionMarket.Claimed(1, alice, 2 ether);
+        pm.claim(1);
+    }
+
+    // ── Test 27: Multiple bets accumulate ──
+
+    function test_multipleBetsAccumulate() public {
+        _createDefaultMarket();
+
+        vm.startPrank(alice);
+        pm.betYes{value: 1 ether}(1);
+        pm.betYes{value: 2 ether}(1);
+        pm.betYes{value: 0.5 ether}(1);
+        vm.stopPrank();
+
+        assertEq(pm.yesStakes(1, alice), 3.5 ether);
+
+        PredictionMarket.Market memory m = pm.getMarket(1);
+        assertEq(m.totalYes, 3.5 ether);
+    }
+
+    // ── Test 28: Bet on resolved market reverts ──
+
+    function test_betOnResolvedMarketReverts() public {
+        _createDefaultMarket();
+        _placeBets();
+        vm.warp(deadline + 1);
+        pm.resolve(1);
+
+        vm.prank(charlie);
+        vm.expectRevert(PredictionMarket.PM__MarketNotOpen.selector);
+        pm.betYes{value: 1 ether}(1);
+    }
+
+    // ── Test 29: Bet on cancelled market reverts ──
+
+    function test_betOnCancelledMarketReverts() public {
+        _createDefaultMarket();
+
+        // Only YES side -> will cancel
+        vm.prank(alice);
+        pm.betYes{value: 1 ether}(1);
+
+        vm.warp(deadline + 1);
+        pm.resolve(1);
+
+        PredictionMarket.Market memory m = pm.getMarket(1);
+        assertEq(uint8(m.status), uint8(PredictionMarket.Status.CANCELLED));
+
+        vm.prank(charlie);
+        vm.expectRevert(PredictionMarket.PM__MarketNotOpen.selector);
+        pm.betYes{value: 1 ether}(1);
+    }
+
+    // ── Test 30: Reentrancy attack blocked ──
+
+    function test_reentrancyAttackBlocked() public {
+        _createDefaultMarket();
+
+        // Deploy attacker and fund it
+        ReentrantAttacker attacker = new ReentrantAttacker(pm);
+        vm.deal(address(attacker), 10 ether);
+
+        // Attacker bets YES
+        attacker.bet(1, 2 ether);
+        // Bob bets NO
+        vm.prank(bob);
+        pm.betNo{value: 2 ether}(1);
+
+        // Resolve -> YES wins
+        vm.warp(deadline + 1);
+        pm.resolve(1);
+
+        // Attacker tries to claim with reentrancy — should revert
+        vm.expectRevert();
+        attacker.attack(1);
+    }
+
     // ── Helpers ──
 
     function _createDefaultMarket() internal {
@@ -270,5 +529,33 @@ contract PredictionMarketTest is Test {
         pm.betYes{value: 1 ether}(1);
         vm.prank(bob);
         pm.betNo{value: 1 ether}(1);
+    }
+}
+
+/// @dev Attacker contract that tries reentrancy on claim()
+contract ReentrantAttacker {
+    PredictionMarket public pm;
+    uint256 public targetMarket;
+    bool public attacking;
+
+    constructor(PredictionMarket _pm) {
+        pm = _pm;
+    }
+
+    function bet(uint256 marketId, uint256 amount) external {
+        pm.betYes{value: amount}(marketId);
+    }
+
+    function attack(uint256 marketId) external {
+        targetMarket = marketId;
+        attacking = true;
+        pm.claim(marketId);
+    }
+
+    receive() external payable {
+        if (attacking) {
+            attacking = false;
+            pm.claim(targetMarket); // reentrant call
+        }
     }
 }
