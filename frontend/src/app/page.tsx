@@ -138,7 +138,7 @@ export default function Home() {
       {/* On-chain data badge */}
       <div className="flex items-center justify-center gap-2 rounded-lg border border-emerald-900/30 bg-emerald-950/10 px-4 py-2 text-xs text-emerald-400">
         <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-        Live on-chain data from Tenderly Sepolia &middot; {formatEth(totalReserve)} ETH total reserve
+        Live on-chain data from Sepolia &middot; {formatEth(totalReserve)} ETH total reserve
       </div>
 
       {/* Leaderboard */}
@@ -224,8 +224,14 @@ export default function Home() {
         ))}
 
         {agents.length === 0 && (
-          <div className="px-6 py-12 text-center text-zinc-500">
-            No agents registered yet
+          <div className="px-6 py-12 text-center">
+            <p className="text-zinc-500">No agents registered yet.</p>
+            <Link
+              href="/create"
+              className="mt-3 inline-block rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
+            >
+              Create one &rarr;
+            </Link>
           </div>
         )}
       </div>
@@ -237,7 +243,7 @@ export default function Home() {
         <span>|</span>
         <span className="font-semibold text-zinc-400">thirdweb</span>
         <span>|</span>
-        <span className="font-semibold text-zinc-400">Tenderly</span>
+        <span className="font-semibold text-zinc-400">Sepolia</span>
       </div>
     </div>
   );

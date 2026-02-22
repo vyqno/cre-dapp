@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -13,8 +13,166 @@ import {
 } from "@/lib/hooks";
 import { formatBps, formatUsd, shortenAddress } from "@/lib/utils";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
+import toast from "react-hot-toast";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+interface AgentStatus {
+  status: "running" | "not_running" | "error";
+  cycleCount?: number;
+  uptimeMs?: number;
+  lastError?: string;
+}
+
+function useAgentStatus(agentId: number) {
+  const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
+
+  const refresh = useCallback(() => {
+    fetch(`/api/agent/status/${agentId}`)
+      .then((r) => r.json())
+      .then((data) => setAgentStatus(data))
+      .catch(() => setAgentStatus({ status: "not_running" }));
+  }, [agentId]);
+
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, 10_000);
+    return () => clearInterval(interval);
+  }, [refresh]);
+
+  return { agentStatus, refresh };
+}
+
+function formatUptime(ms: number) {
+  const seconds = Math.floor(ms / 1000);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+const LLM_PROVIDERS = [
+  { value: "anthropic", label: "Anthropic (Claude)" },
+  { value: "openai", label: "OpenAI (GPT-4o)" },
+  { value: "google", label: "Google (Gemini)" },
+];
+
+function StartAgentModal({
+  agentId,
+  onClose,
+  onStarted,
+}: {
+  agentId: number;
+  onClose: () => void;
+  onStarted: () => void;
+}) {
+  const [llmProvider, setLlmProvider] = useState("anthropic");
+  const [llmKey, setLlmKey] = useState("");
+  const [strategyPrompt, setStrategyPrompt] = useState(
+    "You are an autonomous DeFi trading agent. Monitor prices and execute profitable trades."
+  );
+  const [deploying, setDeploying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleStart = async () => {
+    if (!llmKey) {
+      setError("API key is required");
+      return;
+    }
+    setDeploying(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/agent/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId,
+          llmProvider,
+          llmKey,
+          strategyPrompt,
+          skills: ["prices", "swap"],
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        onStarted();
+        onClose();
+      } else {
+        setError(data.error || "Deploy failed");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setDeploying(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="mx-4 w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-6">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Start Agent</h3>
+          <button onClick={onClose} className="text-zinc-400 hover:text-white">
+            &times;
+          </button>
+        </div>
+
+        {error && (
+          <div className="mt-3 rounded-lg border border-red-900/50 bg-red-950/20 px-4 py-3 text-sm text-red-400">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-4 space-y-4">
+          <div>
+            <label className="mb-1 block text-xs text-zinc-500">LLM Provider</label>
+            <select
+              value={llmProvider}
+              onChange={(e) => setLlmProvider(e.target.value)}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 text-white focus:border-emerald-500 focus:outline-none"
+            >
+              {LLM_PROVIDERS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-zinc-500">API Key</label>
+            <input
+              type="password"
+              placeholder="sk-..."
+              value={llmKey}
+              onChange={(e) => setLlmKey(e.target.value)}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 font-mono text-sm text-white placeholder-zinc-600 focus:border-emerald-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-zinc-500">Strategy Prompt</label>
+            <textarea
+              value={strategyPrompt}
+              onChange={(e) => setStrategyPrompt(e.target.value.slice(0, 500))}
+              rows={4}
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm text-white placeholder-zinc-600 focus:border-emerald-500 focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-zinc-600">{strategyPrompt.length}/500</p>
+          </div>
+        </div>
+
+        <button
+          onClick={handleStart}
+          disabled={!llmKey || deploying}
+          className="mt-4 w-full rounded-lg bg-emerald-600 px-4 py-3 font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {deploying ? "Starting Agent..." : "Start Agent"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function MetricCard({
   label,
@@ -66,9 +224,24 @@ export default function AgentDetailPage({
   const [sellAmount, setSellAmount] = useState("");
   const [activeTab, setActiveTab] = useState<"buy" | "sell">("buy");
   const [txError, setTxError] = useState<string | null>(null);
+  const [showStartModal, setShowStartModal] = useState(false);
 
   const estimatedTokens = useBuyPrice(agent?.curveAddress, buyAmount);
   const sellRefund = useSellRefund(agent?.curveAddress, sellAmount);
+  const { agentStatus, refresh: refreshStatus } = useAgentStatus(agentId);
+  const [stopping, setStopping] = useState(false);
+
+  const handleStopAgent = async () => {
+    setStopping(true);
+    try {
+      await fetch(`/api/agent/stop/${agentId}`, { method: "POST" });
+      refreshStatus();
+    } catch {
+      // ignore
+    } finally {
+      setStopping(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -121,12 +294,18 @@ export default function AgentDetailPage({
   const handleBuy = () => {
     if (!buyAmount || Number(buyAmount) <= 0 || !hasCurve) return;
     setTxError(null);
+    toast.loading("Submitting buy transaction...", { id: "buy-tx" });
     const tx = prepareBuyTransaction(agent.curveAddress, buyAmount);
     sendTransaction(tx, {
-      onSuccess: () => setBuyAmount(""),
+      onSuccess: () => {
+        setBuyAmount("");
+        toast.success("Buy confirmed!", { id: "buy-tx" });
+      },
       onError: (err) => {
         console.error("Buy failed:", err);
-        setTxError(err.message || "Buy transaction failed");
+        const msg = err.message || "Buy transaction failed";
+        setTxError(msg);
+        toast.error(`Buy failed: ${msg.slice(0, 80)}`, { id: "buy-tx" });
       },
     });
   };
@@ -138,12 +317,18 @@ export default function AgentDetailPage({
       return;
     }
     setTxError(null);
+    toast.loading("Submitting sell transaction...", { id: "sell-tx" });
     const tx = prepareSellTransaction(agent.curveAddress, sellAmount);
     sendTransaction(tx, {
-      onSuccess: () => setSellAmount(""),
+      onSuccess: () => {
+        setSellAmount("");
+        toast.success("Sell confirmed!", { id: "sell-tx" });
+      },
       onError: (err) => {
         console.error("Sell failed:", err);
-        setTxError(err.message || "Sell transaction failed");
+        const msg = err.message || "Sell transaction failed";
+        setTxError(msg);
+        toast.error(`Sell failed: ${msg.slice(0, 80)}`, { id: "sell-tx" });
       },
     });
   };
@@ -230,6 +415,76 @@ export default function AgentDetailPage({
           value={`${reserve.toFixed(4)} ETH`}
         />
       </div>
+
+      {/* Agent Status */}
+      {agentStatus && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span
+                className={`inline-block h-2.5 w-2.5 rounded-full ${
+                  agentStatus.status === "running"
+                    ? "bg-emerald-400 animate-pulse"
+                    : agentStatus.status === "error"
+                      ? "bg-red-400"
+                      : "bg-zinc-500"
+                }`}
+              />
+              <div>
+                <p className="text-sm font-semibold">
+                  Agent Status:{" "}
+                  <span
+                    className={
+                      agentStatus.status === "running"
+                        ? "text-emerald-400"
+                        : agentStatus.status === "error"
+                          ? "text-red-400"
+                          : "text-zinc-400"
+                    }
+                  >
+                    {agentStatus.status === "running"
+                      ? "Running"
+                      : agentStatus.status === "error"
+                        ? "Error"
+                        : "Not Running"}
+                  </span>
+                </p>
+                <div className="mt-1 flex items-center gap-3 text-xs text-zinc-500">
+                  {agentStatus.cycleCount !== undefined && (
+                    <span>Cycle #{agentStatus.cycleCount}</span>
+                  )}
+                  {agentStatus.uptimeMs !== undefined && agentStatus.uptimeMs > 0 && (
+                    <span>Up {formatUptime(agentStatus.uptimeMs)}</span>
+                  )}
+                  {agentStatus.lastError && (
+                    <span className="text-red-400">
+                      Last error: {agentStatus.lastError}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {agentStatus.status === "running" ? (
+                <button
+                  onClick={handleStopAgent}
+                  disabled={stopping}
+                  className="rounded-lg border border-red-900/50 bg-red-950/20 px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-900/30 disabled:opacity-50"
+                >
+                  {stopping ? "Stopping..." : "Stop Agent"}
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowStartModal(true)}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
+                >
+                  Start Agent
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Curve state + Trade panel */}
       <div className="grid gap-6 lg:grid-cols-3">
@@ -454,6 +709,15 @@ export default function AgentDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Start Agent Modal */}
+      {showStartModal && (
+        <StartAgentModal
+          agentId={agentId}
+          onClose={() => setShowStartModal(false)}
+          onStarted={refreshStatus}
+        />
+      )}
     </div>
   );
 }

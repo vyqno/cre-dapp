@@ -13,6 +13,7 @@ import {
 import { useAgents, type AgentWithMetrics } from "@/lib/hooks";
 import { formatEth, formatThreshold, formatTimeLeft } from "@/lib/utils";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
+import toast from "react-hot-toast";
 
 function StatusBadge({ status }: { status: number }) {
   const colors: Record<number, string> = {
@@ -64,7 +65,14 @@ function MarketCard({
             {formatThreshold(market.metric, market.threshold)}?
           </p>
         </div>
-        <StatusBadge status={market.status} />
+        <div className="flex items-center gap-2">
+          <StatusBadge status={market.status} />
+          {market.status === 0 && isExpired && (
+            <span className="inline-flex items-center rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-semibold text-yellow-400">
+              Expired
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Pool bar */}
@@ -159,9 +167,17 @@ function CreateMarketForm({
       deadlineTimestamp
     );
 
+    toast.loading("Creating prediction market...", { id: "create-market" });
     sendTransaction(tx, {
-      onSuccess: () => onClose(),
-      onError: (err) => setError(err.message || "Transaction failed"),
+      onSuccess: () => {
+        toast.success("Market created!", { id: "create-market" });
+        onClose();
+      },
+      onError: (err) => {
+        const msg = err.message || "Transaction failed";
+        setError(msg);
+        toast.error(`Market creation failed: ${msg.slice(0, 80)}`, { id: "create-market" });
+      },
     });
   };
 

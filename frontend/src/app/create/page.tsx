@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
 import { ConnectButton } from "thirdweb/react";
 import { readContract } from "thirdweb";
 import { client } from "@/lib/thirdweb";
 import { agentRegistryContract } from "@/lib/contracts";
+import toast from "react-hot-toast";
 import { prepareRegisterAgent, prepareCreateCurve } from "@/lib/hooks";
 
 const STRATEGY_TYPES = [
@@ -37,6 +39,7 @@ const DEFAULT_PROMPT =
 type Step = "identity" | "ai-config" | "economics" | "deploying" | "done";
 
 export default function CreateAgentPage() {
+  const router = useRouter();
   const account = useActiveAccount();
   const { mutate: sendTransaction, isPending } = useSendTransaction();
 
@@ -70,6 +73,16 @@ export default function CreateAgentPage() {
       setWallet(account.address);
     }
   }, [account, wallet]);
+
+  // Auto-redirect to agent page after successful creation
+  useEffect(() => {
+    if (step === "done" && agentId) {
+      const timer = setTimeout(() => {
+        router.push(`/agent/${agentId.toString()}`);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [step, agentId, router]);
 
   if (!account) {
     return (
@@ -106,8 +119,10 @@ export default function CreateAgentPage() {
     setError(null);
 
     const tx = prepareRegisterAgent(wallet, name, strategyType, description, selectedCapabilities);
+    toast.loading("Registering agent on-chain...", { id: "register" });
     sendTransaction(tx, {
       onSuccess: async () => {
+        toast.success("Agent registered!", { id: "register" });
         // Read totalAgents after the tx confirms to get the new agent ID
         try {
           const total = await readContract({
@@ -124,7 +139,9 @@ export default function CreateAgentPage() {
       },
       onError: (err) => {
         console.error("Register failed:", err);
-        setError(err.message || "Registration transaction failed");
+        const msg = err.message || "Registration transaction failed";
+        setError(msg);
+        toast.error(`Registration failed: ${msg.slice(0, 80)}`, { id: "register" });
       },
     });
   };
@@ -134,8 +151,10 @@ export default function CreateAgentPage() {
     setError(null);
 
     const tx = prepareCreateCurve(agentId, tokenName, tokenSymbol);
+    toast.loading("Deploying bonding curve...", { id: "curve" });
     sendTransaction(tx, {
       onSuccess: async () => {
+        toast.success("Bonding curve deployed!", { id: "curve" });
         // Deploy the AI agent after curve is created
         setStep("deploying");
         setDeployStatus("Starting AI agent...");
@@ -170,7 +189,9 @@ export default function CreateAgentPage() {
       },
       onError: (err) => {
         console.error("Create curve failed:", err);
-        setError(err.message || "Bonding curve creation failed");
+        const msg = err.message || "Bonding curve creation failed";
+        setError(msg);
+        toast.error(`Curve creation failed: ${msg.slice(0, 80)}`, { id: "curve" });
       },
     });
   };
@@ -206,12 +227,12 @@ export default function CreateAgentPage() {
               <p className="text-sm text-yellow-400">{deployStatus}</p>
             )}
             <div className="flex gap-4">
-              <Link
-                href={`/agent/${agentId.toString()}`}
+              <button
+                onClick={() => router.push(`/agent/${agentId.toString()}`)}
                 className="rounded-lg bg-emerald-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-emerald-500"
               >
                 View Agent
-              </Link>
+              </button>
               <Link
                 href="/"
                 className="rounded-lg border border-zinc-700 px-6 py-3 font-semibold text-zinc-300 transition-colors hover:bg-zinc-800"
@@ -219,6 +240,9 @@ export default function CreateAgentPage() {
                 Leaderboard
               </Link>
             </div>
+            <p className="text-xs text-zinc-600">
+              Redirecting to agent page in 5 seconds...
+            </p>
           </>
         )}
       </div>

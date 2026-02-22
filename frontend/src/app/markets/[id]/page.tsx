@@ -17,6 +17,7 @@ import {
 import { useAgent } from "@/lib/hooks";
 import { formatEth, shortenAddress, formatThreshold, formatTimeLeft } from "@/lib/utils";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
+import toast from "react-hot-toast";
 
 export default function MarketDetailPage({
   params,
@@ -125,36 +126,64 @@ export default function MarketDetailPage({
   const handleBetYes = () => {
     if (!yesAmount || Number(yesAmount) <= 0) return;
     setTxError(null);
+    toast.loading("Placing YES bet...", { id: "bet-yes" });
     const tx = prepareBetYes(marketId, yesAmount);
     sendTransaction(tx, {
-      onSuccess: () => setYesAmount(""),
-      onError: (err) => setTxError(err.message || "Transaction failed"),
+      onSuccess: () => {
+        setYesAmount("");
+        toast.success("YES bet confirmed!", { id: "bet-yes" });
+      },
+      onError: (err) => {
+        const msg = err.message || "Transaction failed";
+        setTxError(msg);
+        toast.error(`Bet failed: ${msg.slice(0, 80)}`, { id: "bet-yes" });
+      },
     });
   };
 
   const handleBetNo = () => {
     if (!noAmount || Number(noAmount) <= 0) return;
     setTxError(null);
+    toast.loading("Placing NO bet...", { id: "bet-no" });
     const tx = prepareBetNo(marketId, noAmount);
     sendTransaction(tx, {
-      onSuccess: () => setNoAmount(""),
-      onError: (err) => setTxError(err.message || "Transaction failed"),
+      onSuccess: () => {
+        setNoAmount("");
+        toast.success("NO bet confirmed!", { id: "bet-no" });
+      },
+      onError: (err) => {
+        const msg = err.message || "Transaction failed";
+        setTxError(msg);
+        toast.error(`Bet failed: ${msg.slice(0, 80)}`, { id: "bet-no" });
+      },
     });
   };
 
   const handleResolve = () => {
     setTxError(null);
+    toast.loading("Resolving market...", { id: "resolve" });
     const tx = prepareResolve(marketId);
     sendTransaction(tx, {
-      onError: (err) => setTxError(err.message || "Resolve failed"),
+      onSuccess: () => toast.success("Market resolved!", { id: "resolve" }),
+      onError: (err) => {
+        const msg = err.message || "Resolve failed";
+        setTxError(msg);
+        toast.error(`Resolve failed: ${msg.slice(0, 80)}`, { id: "resolve" });
+      },
     });
   };
 
   const handleClaim = () => {
     setTxError(null);
+    toast.loading("Claiming payout...", { id: "claim" });
     const tx = prepareClaim(marketId);
     sendTransaction(tx, {
-      onError: (err) => setTxError(err.message || "Claim failed"),
+      onSuccess: () => toast.success("Payout claimed!", { id: "claim" }),
+      onError: (err) => {
+        const msg = err.message || "Claim failed";
+        setTxError(msg);
+        toast.error(`Claim failed: ${msg.slice(0, 80)}`, { id: "claim" });
+      },
     });
   };
 
@@ -187,6 +216,11 @@ export default function MarketDetailPage({
           >
             {STATUS_LABELS[market.status]}
           </span>
+          {isOpen && isExpired && (
+            <span className="inline-flex items-center rounded-full border border-yellow-900/30 bg-yellow-500/10 px-3 py-1 text-xs font-semibold text-yellow-400">
+              Expired
+            </span>
+          )}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-zinc-400">
           <span>
@@ -241,9 +275,23 @@ export default function MarketDetailPage({
         </div>
       )}
 
+      {/* Mobile Bet Button - shown only on small screens when betting panel is hidden */}
+      {isOpen && !isExpired && (
+        <div className="fixed bottom-6 left-4 right-4 z-40 md:hidden">
+          <button
+            onClick={() => {
+              document.getElementById("betting-panel")?.scrollIntoView({ behavior: "smooth" });
+            }}
+            className="w-full rounded-xl bg-emerald-600 px-6 py-4 text-center font-semibold text-white shadow-lg shadow-emerald-900/30 transition-colors hover:bg-emerald-500"
+          >
+            Place a Bet
+          </button>
+        </div>
+      )}
+
       {/* Betting Panel (only when open and before deadline) */}
       {isOpen && !isExpired && (
-        <div className="grid gap-6 md:grid-cols-2">
+        <div id="betting-panel" className="grid gap-6 md:grid-cols-2">
           {/* Bet YES */}
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
             <h3 className="mb-4 text-lg font-semibold text-emerald-400">

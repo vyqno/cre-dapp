@@ -62,7 +62,7 @@ const METHODS = {
   totalAgents:
     "function totalAgents() view returns (uint256)",
   getAgent:
-    "function getAgent(uint256 agentId) view returns ((uint256 id, address wallet, address creator, string name, string strategyType, string description, bool isActive, uint256 registeredAt))",
+    "function getAgent(uint256 agentId) view returns ((uint256 id, address wallet, address creator, string name, string strategyType, string description, string[] capabilities, bool isActive, uint256 registeredAt))",
   // AgentMetrics
   getMetrics:
     "function getMetrics(uint256 agentId) view returns ((int256 roiBps, uint256 winRateBps, uint256 maxDrawdownBps, uint256 sharpeRatioScaled, uint256 tvlManaged, uint256 totalTrades, uint256 lastUpdated))",
@@ -161,8 +161,9 @@ async function fetchAgentData(agentId: bigint): Promise<AgentWithMetrics | null>
     creator: String(agent.creator ?? agent[2] ?? "0x"),
     strategyType: String(agent.strategyType ?? agent[4] ?? "Unknown"),
     description: String(agent.description ?? agent[5] ?? ""),
-    isActive: Boolean(agent.isActive ?? agent[6] ?? true),
-    registeredAt: Number(agent.registeredAt ?? agent[7] ?? 0),
+    // agent[6] is capabilities (string[]), agent[7] is isActive, agent[8] is registeredAt
+    isActive: Boolean(agent.isActive ?? agent[7] ?? true),
+    registeredAt: Number(agent.registeredAt ?? agent[8] ?? 0),
     metrics: {
       roiBps: Number(metrics.roiBps ?? metrics[0] ?? 0),
       winRateBps: Number(metrics.winRateBps ?? metrics[1] ?? 0),
