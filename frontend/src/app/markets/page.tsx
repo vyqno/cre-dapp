@@ -99,7 +99,12 @@ function MarketCard({
 
       {/* Footer */}
       <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
-        <span>{timeLeft}</span>
+        <div className="flex items-center gap-2">
+          <span>{timeLeft}</span>
+          <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
+            &#x2713; CRE-resolved
+          </span>
+        </div>
         <span>
           Volume: {formatEth(market.totalYes + market.totalNo)} ETH
         </span>

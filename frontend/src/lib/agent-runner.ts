@@ -5,6 +5,11 @@ import {
   erc20ActionProvider,
   pythActionProvider,
   walletActionProvider,
+  wethActionProvider,
+  defillamaActionProvider,
+  sushiRouterActionProvider,
+  compoundActionProvider,
+  acrossActionProvider,
 } from "@coinbase/agentkit";
 import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -80,15 +85,29 @@ function createModel(provider: LLMProvider, apiKey: string) {
 
 // --- Build action providers from skill selection ---
 
-function buildActionProviders(skills: AgentSkill[]) {
+function buildActionProviders(skills: AgentSkill[], privateKey: Hex) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const providers: any[] = [
     walletActionProvider(),
     erc20ActionProvider(),
+    wethActionProvider(),
+    defillamaActionProvider(),
   ];
 
   if (skills.includes("prices")) {
     providers.push(pythActionProvider());
+  }
+
+  if (skills.includes("swap")) {
+    providers.push(sushiRouterActionProvider());
+  }
+
+  if (skills.includes("lend")) {
+    providers.push(compoundActionProvider());
+  }
+
+  if (skills.includes("bridge")) {
+    providers.push(acrossActionProvider({ privateKey }));
   }
 
   return providers;
@@ -114,7 +133,7 @@ export async function createAndRunAgent(config: AgentConfig): Promise<RunningAge
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const walletProvider = new ViemWalletProvider(walletClient as any);
-  const actionProviders = buildActionProviders(config.skills);
+  const actionProviders = buildActionProviders(config.skills, config.privateKey);
 
   const agentkit = await AgentKit.from({
     walletProvider,

@@ -681,8 +681,8 @@ export default function AgentDetailPage({
         </div>
       </div>
 
-      {/* CRE Verification Badge */}
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+      {/* CRE Verification Section */}
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6 space-y-5">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/10">
             <span className="text-lg text-blue-400">&#x2713;</span>
@@ -692,22 +692,61 @@ export default function AgentDetailPage({
             <p className="text-sm text-zinc-400">
               All performance data is fetched, validated, and published on-chain
               by Chainlink CRE DON consensus.
-              {agent.metrics.lastUpdated > 0 && (
-                <>
-                  {" "}
-                  Last verified{" "}
-                  {Math.max(
-                    0,
-                    Math.round(
-                      (Date.now() / 1000 - agent.metrics.lastUpdated) / 60
-                    )
-                  )}{" "}
-                  minutes ago.
-                </>
-              )}
             </p>
           </div>
         </div>
+
+        {/* Verification status */}
+        {agent.metrics.lastUpdated > 0 ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-4 text-sm">
+              <div>
+                <p className="text-xs text-zinc-500">Last Verified</p>
+                <p className="mt-0.5 font-medium text-zinc-200">
+                  {new Date(agent.metrics.lastUpdated * 1000).toLocaleString()}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-zinc-500">Data Freshness</p>
+                {(() => {
+                  const ageMin = Math.max(0, Math.round((Date.now() / 1000 - agent.metrics.lastUpdated) / 60));
+                  const isStale = ageMin > 60;
+                  return (
+                    <p className={`mt-0.5 font-medium ${isStale ? "text-yellow-400" : "text-emerald-400"}`}>
+                      {isStale
+                        ? `Stale — last update ${ageMin >= 120 ? `${Math.round(ageMin / 60)}h` : `${ageMin}m`} ago`
+                        : `Updated ${ageMin}m ago`}
+                    </p>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Verified metrics list */}
+            <div>
+              <p className="text-xs font-medium text-zinc-500 mb-2">Verified by CRE DON</p>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm md:grid-cols-3">
+                {[
+                  "ROI (bps)",
+                  "Win Rate",
+                  "Max Drawdown",
+                  "Sharpe Ratio",
+                  "TVL Managed",
+                  "Total Trades",
+                ].map((metric) => (
+                  <div key={metric} className="flex items-center gap-1.5 text-zinc-300">
+                    <span className="text-emerald-400 text-xs">&#x2713;</span>
+                    {metric}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-zinc-500">
+            No CRE verification data yet. Metrics will be verified once the Chainlink DON publishes its first update.
+          </p>
+        )}
       </div>
 
       {/* Start Agent Modal */}

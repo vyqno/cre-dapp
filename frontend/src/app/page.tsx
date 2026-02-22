@@ -141,6 +141,12 @@ export default function Home() {
         Live on-chain data from Sepolia &middot; {formatEth(totalReserve)} ETH total reserve
       </div>
 
+      {/* CRE verification badge */}
+      <div className="flex items-center justify-center gap-2 rounded-lg border border-blue-900/30 bg-blue-950/10 px-3 py-1.5 text-xs text-blue-400">
+        <span className="text-sm">&#x2713;</span>
+        Verified by Chainlink CRE &mdash; metrics are fetched, validated, and published on-chain via DON consensus
+      </div>
+
       {/* Leaderboard */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50">
         <div className="border-b border-zinc-800 px-6 py-4">
@@ -174,7 +180,14 @@ export default function Home() {
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-zinc-500">{index + 1}</span>
                 <div>
-                  <p className="font-medium">{agent.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-medium">{agent.name}</p>
+                    {agent.metrics.lastUpdated > 0 && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
+                        &#x2713; CRE
+                      </span>
+                    )}
+                  </div>
                   <span className="text-xs text-zinc-500">{agent.strategyType}</span>
                 </div>
               </div>
@@ -190,7 +203,14 @@ export default function Home() {
               {index + 1}
             </div>
             <div className="col-span-3 hidden md:block">
-              <p className="font-medium">{agent.name}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="font-medium">{agent.name}</p>
+                {agent.metrics.lastUpdated > 0 && (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
+                    &#x2713; CRE
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-zinc-500">
                 {shortenAddress(agent.wallet)}
               </p>
